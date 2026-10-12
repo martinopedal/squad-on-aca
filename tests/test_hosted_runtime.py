@@ -34,12 +34,15 @@ class HostedRuntimeTests(unittest.TestCase):
             AZURE_STORAGE_ACCOUNT="syntheticstorage",
             QUEUE_NAME="fixture-queue",
             GITHUB_APP_ID="123",
+            GITHUB_APP_SLUG="fixture-app",
             GITHUB_APP_INSTALLATION_ID="456",
             KEY_VAULT_NAME="synthetic-vault",
             KEY_VAULT_SECRET_NAME="synthetic-app-key",
             COPILOT_TOKEN_SECRET_NAME="synthetic-copilot",
             AZURE_CLIENT_ID="synthetic-mi",
             GITHUB_REPO="owned/demo",
+            RUNNER_NAME="synthetic-runner",
+            HOSTNAME="synthetic-replica",
             SQUAD_TARGET_REPO="owned/demo",
             SQUAD_README_ONLY="true",
             SQUAD_TIMEOUT_SECONDS="30",
@@ -102,6 +105,9 @@ case "$1 $2" in
     if [[ "$*" == *isCrossRepository* ]]; then echo squad/ripley/issue-7
     else echo '{"title":"fixture revision","body":"fixture","reviews":[],"comments":[]}'; fi;;
   "api repos/owned/demo/pulls/9/comments") echo '[]';;
+  "api apps/fixture-app")
+    if [[ "$FIXTURE_MODE" == wrong-app ]]; then echo 999; else echo 123; fi;;
+  "api users/fixture-app[bot]") echo 789;;
   "pr create") echo https://example.invalid/fixture/pull/1;;
   *) exit 1;;
 esac
@@ -224,6 +230,7 @@ echo runner-started >> "$FIXTURE_LOG"
         self.assertIn("gh:pr create --repo owned/demo", self.calls())
         self.assertEqual(self.git("diff", "--name-only", "main", "squad/ripley/issue-7"), "README.md")
         self.assertIn("Genuine synthetic README", self.git("show", "squad/ripley/issue-7:README.md"))
+        self.assertEqual(self.git("log", "-1", "--format=%an", "squad/ripley/issue-7"), "fixture-app[bot]")
         self.assert_no_secrets(result)
 
     def test_missing_profile_cannot_publish(self):
@@ -289,6 +296,11 @@ echo runner-started >> "$FIXTURE_LOG"
         self.assertNotIn("curl-argv:", self.calls())
         self.assertNotIn("acknowledge", self.calls())
 
+    def test_wrong_app_identity_cannot_impersonate_upstream_bot(self):
+        result = self.agent("wrong-app")
+        self.assertIn("does not match the signing App", result.stdout)
+        self.assert_no_publication(result)
+
     def test_revision_applies_real_readme_without_new_pr(self):
         self.message.update(type="revise", pr_number=9, branch="squad/ripley/issue-7")
         result = self.agent()
@@ -331,12 +343,14 @@ echo runner-started >> "$FIXTURE_LOG"
     def test_registration_denial_fails_closed(self):
         result = self.runner("registration-denied")
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Fresh repo registration denied or expired", result.stdout)
         self.assertNotIn("configured", self.calls())
         self.assert_no_secrets(result)
 
     def test_expired_registration_is_rejected(self):
         result = self.runner("expired")
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Fresh repo registration denied or expired", result.stdout)
         self.assertNotIn("configured", self.calls())
         self.assert_no_secrets(result)
 
@@ -344,6 +358,7 @@ echo runner-started >> "$FIXTURE_LOG"
         self.env["RUNNER_TOKEN"] = "fixture-registration-secret"
         result = self.runner()
         self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Persisted RUNNER_TOKEN is unsupported", result.stdout)
         self.assertEqual(self.calls(), "")
         self.assert_no_secrets(result)
 

@@ -40,6 +40,9 @@ remote session export are disabled; direct Azure/GitHub/curl/wget/push tool
 calls are denied. The publication guard also rejects known runtime credentials
 and common token/PEM patterns in the complete diff. Repository Git hooks and
 external diff drivers are disabled in the trusted wrapper.
+`GITHUB_APP_SLUG` is public configuration and must resolve to the configured
+App ID. The wrapper reads that App's actual bot user ID and uses its bot login
+for commit identity, rather than impersonating the original author's bot.
 The clone is the current target default branch, and native `Squad` runs from
 that working directory with `-p`, not interactive piped input. The real tracked
 `.github/agents/squad.agent.md` and `.squad/team.md` must exist; if the target's

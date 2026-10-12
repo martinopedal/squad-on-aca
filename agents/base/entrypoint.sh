@@ -7,7 +7,7 @@ die() { log "FATAL: $*"; exit 1; }
 source "$(dirname "${BASH_SOURCE[0]}")/github-app.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/runtime-contract.sh"
 
-for name in AZURE_STORAGE_ACCOUNT QUEUE_NAME GITHUB_APP_ID GITHUB_APP_INSTALLATION_ID KEY_VAULT_NAME KEY_VAULT_SECRET_NAME COPILOT_TOKEN_SECRET_NAME; do
+for name in AZURE_STORAGE_ACCOUNT QUEUE_NAME GITHUB_APP_ID GITHUB_APP_SLUG GITHUB_APP_INSTALLATION_ID KEY_VAULT_NAME KEY_VAULT_SECRET_NAME COPILOT_TOKEN_SECRET_NAME; do
   [[ -n "${!name:-}" ]] || die "Required setting ${name} missing."
 done
 
@@ -52,6 +52,12 @@ log "Issue #${ISSUE_NUMBER}; agent=${AGENT_TYPE}; mode=${MSG_TYPE}; repo=${GITHU
 GITHUB_TOKEN=$(github_app_token "${GITHUB_REPO}") \
   || die "App target token mint denied; verify installation access."
 export GITHUB_TOKEN GH_TOKEN="${GITHUB_TOKEN}"
+[[ "${GITHUB_APP_SLUG}" =~ ^[a-z0-9-]+$ ]] || die "Invalid configured App slug."
+PUBLIC_APP_ID=$(gh api "apps/${GITHUB_APP_SLUG}" --jq '.id') || die "App identity metadata unavailable."
+[[ "${PUBLIC_APP_ID}" == "${GITHUB_APP_ID}" ]] || die "Configured bot identity does not match the signing App."
+BOT_LOGIN="${GITHUB_APP_SLUG}[bot]"
+BOT_USER_ID=$(gh api "users/${BOT_LOGIN}" --jq '.id') || die "App bot identity unavailable."
+[[ "${BOT_USER_ID}" =~ ^[0-9]+$ ]] || die "Invalid App bot user ID."
 COPILOT_TOKEN=$(az keyvault secret show --vault-name "${KEY_VAULT_NAME}" \
   --name "${COPILOT_TOKEN_SECRET_NAME}" --query value -o tsv 2>/dev/null) \
   || die "Managed Identity Copilot secret read failed."
@@ -97,8 +103,8 @@ fi
 WORKSPACE="${SQUAD_WORKSPACE:-/workspace}"
 gh repo clone "${GITHUB_REPO}" "${WORKSPACE}/repo" >/dev/null 2>&1 || die "Target clone failed."
 cd "${WORKSPACE}/repo"
-git config user.name 'squad-aca-bot[bot]'
-git config user.email '3362344+squad-aca-bot[bot]@users.noreply.github.com'
+git config user.name "${BOT_LOGIN}"
+git config user.email "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com"
 git config commit.gpgsign false
 git config core.hooksPath /dev/null
 BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD)

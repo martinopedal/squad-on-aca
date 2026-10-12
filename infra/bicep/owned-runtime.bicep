@@ -26,6 +26,7 @@ param images {
 param routing {
   targetRepo: string
   appId: string
+  appSlug: string
   installationId: string
   vaultName: string
   appSecretName: string
@@ -45,6 +46,7 @@ resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' 
 
 var commonEnv = [
   { name: 'GITHUB_APP_ID', value: routing.appId }
+  { name: 'GITHUB_APP_SLUG', value: routing.appSlug }
   { name: 'GITHUB_APP_INSTALLATION_ID', value: routing.installationId }
   { name: 'KEY_VAULT_NAME', value: routing.vaultName }
   { name: 'KEY_VAULT_SECRET_NAME', value: routing.appSecretName }
