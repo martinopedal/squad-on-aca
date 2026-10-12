@@ -1,5 +1,4 @@
 name: Squad CI
-# Project type was not detected — configure build/test commands below
 
 on:
   pull_request:
@@ -19,10 +18,5 @@ jobs:
 
       - name: Build and test
         run: |
-          # TODO: Project type was not detected — add your build/test commands here
-          # Go:            go test ./...
-          # Python:        pip install -r requirements.txt && pytest
-          # .NET:          dotnet test
-          # Java (Maven):  mvn test
-          # Java (Gradle): ./gradlew test
-          echo "No build commands configured — update squad-ci.yml"
+          for script in agents/base/*.sh agents/runner/*.sh; do bash -n "$script"; done
+          python -m unittest discover -s tests -p 'test_*.py' -v

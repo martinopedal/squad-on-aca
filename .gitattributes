@@ -7,3 +7,9 @@
 
 # Shell hooks must stay LF-only; CRLF breaks bash -n and azd POSIX hooks.
 *.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.bicep text eol=lf
+**/Dockerfile text eol=lf

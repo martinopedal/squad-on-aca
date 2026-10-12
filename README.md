@@ -1,5 +1,12 @@
 # Squad on ACA
 
+Fork of [haflidif/squad-on-aca](https://github.com/haflidif/squad-on-aca),
+created by [@haflidif](https://github.com/haflidif), under the original MIT
+license. This owned fork fixes fresh ephemeral runner registration, native Squad
+discovery and failure reporting for our hosted demo; it does not change or
+diagnose Haflidi's original working deployment. See the
+[owned runtime repair and deployment gates](docs/owned-runtime.md).
+
 > Run [Squad](https://bradygaster.github.io/squad/) AI agents on Azure Container App Jobs — **$0 idle cost**, full multi-agent orchestration.
 
 Label a GitHub issue with `squad:{agent-name}`, and a serverless container wakes up, analyzes the issue, writes code, and opens a pull request. When it's done, it shuts down. You only pay when agents are actively working.
@@ -58,7 +65,8 @@ Enriched PR Body
 
 ✅ **Identity-Based Auth Everywhere** — No shared keys. All Azure services use Managed Identity. GitHub ops use temporary tokens (10-min JWT, 1-hour installation token).
 
-✅ **Graceful Fallback** — If Copilot CLI fails, a work artifact is created and a PR is still opened so context isn't lost.
+✅ **Fail-Closed Publication** — Missing native Squad setup, failed Copilot runs,
+empty work and out-of-scope README smoke changes exit nonzero without a stub PR.
 
 ---
 
@@ -70,7 +78,7 @@ Enriched PR Body
 ### 1. Clone
 
 ```bash
-git clone https://github.com/haflidif/squad-on-aca.git && cd squad-on-aca
+git clone https://github.com/martinopedal/squad-on-aca.git && cd squad-on-aca
 ```
 
 ### 2. Create a GitHub App
@@ -142,7 +150,7 @@ az keyvault secret set --vault-name "${KV_NAME}" --name "copilot-pat" --value "Y
 Contributions welcome! Areas for expansion:
 - Multi-region deployment
 - Per-agent CPU/memory tuning
-- Additional fallback strategies
+- Clear failed-job diagnostics without fallback PRs
 - Teams/Slack notifications
 - Custom agents beyond Copilot CLI
 

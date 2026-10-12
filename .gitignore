@@ -47,3 +47,6 @@ docs/blog-source-material.md
 
 # Compiled Bicep ARM output (build artifact)
 infra/bicep/*.json
+# Offline synthetic test workspaces (removed by the suite).
+tests/.fixtures/
+tests/__pycache__/

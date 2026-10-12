@@ -2,3 +2,5 @@
 *
 !Dockerfile
 !entrypoint.sh
+!github-app.sh
+!runtime-contract.sh

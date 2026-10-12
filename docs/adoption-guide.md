@@ -484,7 +484,7 @@ Before testing, each target repo needs a Squad team. [Squad](https://bradygaster
    cd /path/to/target-repo
    # Ensure .github/agents/squad.agent.md exists (the Squad coordinator manifest)
    # Start a Copilot session — Squad will propose a team
-   copilot --agent squad
+   copilot --agent Squad
    ```
 
 2. **Squad proposes a team**: Squad's casting system assigns unique agent names from a fictional universe (e.g., `ripley`, `data`, `gandalf`). You'll see a proposal with roles, specialties, and routing rules.
@@ -529,7 +529,7 @@ The platform adds its own **operational labels** (`squad:processing`, `squad:que
 | Team creation | `squad init` creates `.squad/`, agent charters, routing rules | Container reads committed `.squad/team.md` at runtime |
 | Labels | Creates `squad:{agent-name}` + full taxonomy during init | Entrypoint adds `squad:processing` and `squad:queued` |
 | Label sync | `sync-squad-labels.yml` keeps agent labels current | `squad-queue.yml` triggers on `issues.labeled` events |
-| Agent routing | Defines agent charters and `@{agent-name}` mentions | Passes `agent_type` from queue message to `copilot --yolo --agent squad` |
+| Agent routing | Defines agent charters and `@{agent-name}` mentions | Passes `agent_type` as task data to native `copilot --agent Squad -p ...` in the target clone |
 
 ### If you need to add labels manually
 
@@ -699,7 +699,8 @@ Edit `agents/base/entrypoint.sh` to pass model flags:
 
 ```bash
 # Change the copilot invocation (search for "copilot --yolo")
-echo "${SQUAD_PROMPT}" | copilot --yolo --agent squad --model gpt-4o
+# Customize run_squad in agents/base/runtime-contract.sh while retaining
+# its secret-environment, tool-denial, deadline and publication controls.
 ```
 
 ### Adjusting resources
@@ -748,7 +749,9 @@ The revision flow is an optional but recommended addition:
 ### "PR not created — no commits on branch"
 
 **Cause**: Copilot CLI ran but didn't produce any changes.
-**Solution**: Check the PR body for the fallback work artifact. The issue description may be too vague for Copilot to act on. Make the issue more specific.
+**Solution**: The owned runtime does not open an empty/fallback PR. Check the
+sanitized job failure, verify the native target profile and task clarity, and
+approve an explicit deduplicated retry after repair.
 
 ### "az login --identity failed"
 

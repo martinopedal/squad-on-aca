@@ -6,9 +6,8 @@
 #
 # BASE_ACR_HOST: ACR login server with trailing slash, e.g. "myacr.azurecr.io/"
 # Pass at build time: az acr build --build-arg BASE_ACR_HOST=myacr.azurecr.io/ ...
-# Default falls back to the original bootstrap ACR (crsquadacaa6b49feb.azurecr.io/)
-# so the Dockerfile remains functional without specifying the arg.
-ARG BASE_ACR_HOST=crsquadacaa6b49feb.azurecr.io/
+# An unconfigured owned build must not contact the original author's registry.
+ARG BASE_ACR_HOST=registry-not-configured.invalid/
 FROM ${BASE_ACR_HOST}base/golang:1.23.4-bookworm AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -32,7 +31,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub Copilot CLI (installed in build stage, copied to runtime)
-RUN npm install -g @github/copilot
+ARG COPILOT_VERSION=1.0.96
+RUN npm install -g "@github/copilot@${COPILOT_VERSION}"
 
 # =============================================================================
 # Stage 2: Runtime — slim image with only what we need
@@ -42,7 +42,7 @@ FROM ${BASE_ACR_HOST}base/debian:bookworm-20240701-slim AS runtime
 
 LABEL maintainer="Haflidi Fridthjofsson"
 LABEL org.opencontainers.image.description="Squad agent runtime for Azure Container App Jobs"
-LABEL org.opencontainers.image.source="https://github.com/haflidif/squad-on-aca"
+LABEL org.opencontainers.image.source="https://github.com/martinopedal/squad-on-aca"
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -75,6 +75,7 @@ RUN ln -sf /usr/lib/node_modules/@github/copilot/npm-loader.js /usr/local/bin/co
 WORKDIR /workspace
 
 COPY entrypoint.sh /entrypoint.sh
+COPY github-app.sh runtime-contract.sh /
 RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

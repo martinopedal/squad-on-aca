@@ -2,6 +2,10 @@
 
 > The WHY behind every architectural decision in Squad on ACA. Each section explains the alternatives considered, the tradeoffs, and why we chose what we chose.
 
+This page preserves upstream historical design rationale. In this owned fork,
+the old fallback/token-swap behavior below is superseded by
+[Owned runtime repair](owned-runtime.md): failed work cannot create a PR.
+
 ---
 
 ## Why Container App Jobs instead of AKS?
