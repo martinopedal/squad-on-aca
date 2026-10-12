@@ -1,144 +1,145 @@
-# Owned hosted Squad-on-ACA fork preparation
+# Owned hosted Squad-on-ACA scheduled-poller preparation
 
 ## Status
 
-Ready for Validation (source/local readiness only; live deployment BLOCKED).
-Scope-approved preparation. The user explicitly requested an owned fork of
-Haflidi's original, repairs necessary for a working hosted Apps/Jobs demo, retained
-attribution, and autonomous implementation decisions overnight. Exact deployment
-source, resource plan, cost and execution qualification are not yet accepted.
+Ready for Validation (source/local readiness; real deployment BLOCKED).
+The delegated overnight decision approves source preparation that replaces
+the broken owned self-hosted enqueue-runner dependency with private scheduled
+issue polling. It does not approve an apply, new IAM/network resources or image
+publication. The existing workspace plan remains the validation source of truth.
 
 ## Source and ownership
 
-- Owned fork: `martinopedal/squad-on-aca`.
-- Upstream: `haflidif/squad-on-aca`, MIT license retained.
-- Initial fork checkpoint: `b82c285298592909d4b5f7fb9c196ccafc3c2850`.
-- Modify only the owned fork and explicitly qualified owned target/runtime.
-- Leave Haflidi's original implementation, working AKS, shared Corp resources,
-  the presenter VM and its currently attached disk untouched. Only the two
-  exact broken owned-clone jobs may be updated after separate source/scope gates.
+- Owned fork: `martinopedal/squad-on-aca`; focused PR1, existing repair branch.
+- Upstream: `haflidif/squad-on-aca`; original MIT copyright retained unchanged.
+- Initial checkpoint: `b82c285298592909d4b5f7fb9c196ccafc3c2850`.
+- Mode MODIFY; preserve upstream Bash/container, Terraform/Bicep recipes and
+  Jobs API `2025-01-01`. No azd initialization or provider migration.
+- Only the owned fork and accepted owned target/runtime are in scope.
+- Original source/runtime, working AKS, shared networks, VM and attached disk
+  stay untouched. Upstream push is disabled in this independent clone.
 
-## Required outcome
+## Approved architecture and required outcome
 
-One actual hosted issue -> enqueue -> ACA Job -> genuine Squad work -> reviewed
-README-only bot PR trace, with repository/runtime/identity bindings, numeric
-results and cleanup. This is distinct from the accepted native ACA Sandboxes
-host-to-microVM flow.
+```text
+sole approved owned squad:ripley issue
+ -> private scheduled ACA poller (existing broken runner Job ID candidate)
+ -> existing MI-authenticated Storage Queue
+ -> existing KEDA event worker (min0/max1)
+ -> genuine target Squad1.0.1 using pinned Copilot CLI1.0.96
+ -> numeric success, actual README-only diff and configured App bot PR
+```
 
-## Constraints
+- Poller: existing MI -> existing Key Vault App PEM in process memory -> short
+  App JWT -> target-scoped installation token requesting only Issues:write,
+  Contents:read and Pull requests:read. No App Administration permission,
+  runner/JIT credential, Copilot credential read or new IAM.
+- Configure exactly one target/issue/agent and an accepted UTC cutoff.
+  Closed/wrong label, processing/attempted/queued, branch/PR and busy-queue
+  dedup all precede enqueue. Read denials fail closed.
+- Queue contains only bound metadata, TTL600 and visibility delay10.
+  Processing label is written only after accepted queue put.
+- The worker handles the accepted-message/label race for only that configured
+  poller issue, records `squad:attempted`, and cannot silently rerun duplicate
+  sequential messages after native failure. No fallback PR.
+- The genuine target setup PR8 was normally merged after independent review;
+  its real Squad profile/team/Ripley/checker are preserved.
+- Existing target enqueue workflow must be normally retired after source
+  acceptance. The owned old queued zero-step run is canceled only by exact ID
+  after requalification; no issue close, queue purge or duplicate smoke.
+- Both jobs use one accepted immutable image. Poller has 0.25vCPU/0.5Gi,
+  50s process deadline, 60s replica timeout, retries0 and five-minute UTC cron.
+  Worker has 1vCPU/2Gi, timeout600, retries0 and max1/min0.
+- Explicit IaC ordering updates the worker before enabling the poller.
+  Supplied tags and workload profile are preserved. No new estate resources.
 
-- Preserve existing legitimate App/managed-identity authority; no credential copy,
-  plaintext registration tokens in logs/state/ARM metadata, broad permissions or
-  fabricated fallback PR success.
-- Durable Azure changes use reviewed IaC and exact validation/plan gates.
-- Use the approved Online primary placement for eligible components, or preserve
-  an existing owned runtime where its required private placement is qualified.
-- Total tenant budget remains USD2,500 through October 15; current conservative
-  queue estimate has limited headroom and must account for any new deployment.
-- Real required human/GitHub gates remain. No impersonation or admin bypass.
-- Morning reporting is requested; routine overnight Teams messages are paused.
+## Read-only qualification and unresolved ownership
+
+- Existing UAMI metadata has Message Sender (queue add), Data Reader (peek),
+  Message Processor (get/delete), Key Vault Secrets User and AcrPull/AcrPush at
+  their existing resource scopes. No new role is requested.
+- Actual role-definition dataActions confirm queue add and read.
+- Existing poller candidate is the broken manual owned runner Job, user-created
+  and untagged; worker is event-driven with its existing ownership tags.
+  Both use the same existing private environment/UAMI and Consumption profile.
+- These metadata facts do not prove no Terraform owner. State/baseline ownership
+  remains BLOCKED; no state is read, imported, rewritten or bypassed.
+- Group deployment metadata contains only historical failed policy deployments;
+  absence of a successful ARM deployment is not proof of no Terraform ownership.
+- Private exact bindings/evidence are in the operator receipt, not public inputs.
+
+## Build and publisher choice
+
+- Installed Windows Docker daemon is absent; no host service/features changed.
+- Approved source CI builds the actual shared worker/poller image on Ubuntu,
+  credential-free, using explicit public versions of the recipe's Go/Debian
+  base images. It checks real tooling and both installed entrypoints; no push.
+- The owned ACR is Premium/private, public network disabled, admin disabled and
+  trusted Azure services bypass configured. Public GitHub runner connectivity
+  is not qualified by AcrPush alone.
+- Read-only ACR task/agent-pool lists are both empty. No new standing pool,
+  network access, registry admin key or IAM grant is allowed.
+- Current publisher choice is therefore **credential-free CI build; private
+  publication unqualified**. Existing private runner or owner-authenticated
+  transient trusted ACR build authority/reachability must be accepted before
+  publication. An optional private publisher workflow is not proof of a route.
+- Images remain immutable digest references; publishing never updates jobs.
+
+## Cost, lifecycle and scope
+
+- Reuse environment, queue, Key Vault, identity, registry and exact two Jobs.
+- No new Azure workload or image push occurs in preparation.
+- Parent's tenant cap is USD2,500 through October15; conservative estimate2226
+  leaves approximately USD273, not an accepted deployment reservation.
+- One admitted 60s poller plus 600s worker conservatively totals615 vCPU-seconds
+  and1,230 GiB-seconds. Count image build/storage/logs and every cron tick too.
+- Cutoff prevents GitHub/queue activity, not all scheduled billing. A reviewed
+  IaC retirement of the schedule is mandatory at the accepted window's end.
+- Live supervision maximum600s; stop only exact newly recorded executions,
+  not all jobs. No standing builder or duplicate poller is permitted.
+- If state ownership forbids repurposing, separately qualify a minimal
+  alternative graph and cost before proposing any resource creation.
 
 ## Preparation checklist
 
-- [x] Verify owned fork, upstream parent, license and initial checkpoint.
-- [x] Inspect existing application, infrastructure and authentication contracts.
-- [x] Identify owned-source fixes for agent discovery, result semantics and registration.
-- [x] Implement protected fresh startup minting with offline denial/expiry tests.
-- [x] Define bounded existing two-job scope without duplicate infrastructure.
-- [x] Implement source/tests, attribution and explicit owned image publishing gates.
-- [ ] Independently accept source and promote through normal GitHub gates.
-- [x] Complete local mocked functional verification and mark Ready for Validation.
-- [ ] Invoke azure-validate, then azure-deploy only after accepted qualifications.
-- [ ] Capture actual hosted end-to-end results; preserve original upstream.
+- [x] Existing plan, scope and upstream/license preservation.
+- [x] Poller implementation with narrow existing App permissions.
+- [x] Handoff/dedup/negative tests; existing fail-closed worker tests retained.
+- [x] Focused existing-job Schedule/Event Bicep and source graph.
+- [x] Credential-free Linux container build and entry smoke configured in CI.
+- [x] Queue role metadata and publisher/ownership read-only checks.
+- [x] Owned target workflow retirement template; no target mutation yet.
+- [ ] Parent independently accept exact PR1 source and normally promote.
+- [ ] Accept private publication route and immutable image digest.
+- [ ] Accept exact state/baseline, cost, policy and deployment qualification.
+- [ ] Normally retire target workflow and cancel only its old queued run.
+- [ ] Complete azure-validate before accepted azure-deploy.
+- [ ] Capture genuine hosted issue -> poller -> worker -> README PR receipt.
 
-## Architecture decisions
+## Functional verification and Section7: Validation Proof
 
-- Mode: MODIFY, preserving upstream Terraform/Bicep recipes and Jobs API
-  `2025-01-01`; no azd init, provider migration or changes to upstream resources.
-- Existing queue receives target workflow output; the manual private enqueue
-  runner and event-driven Squad agent are distinct ACA Jobs.
-- Registration is minted inside every runner startup via existing MI -> existing
-  Key Vault PEM -> short App JWT -> target-scoped App installation token ->
-  fresh repo registration token. No protected value is an ARM/IaC parameter.
-- Existing demo App public metadata lacks Administration:write. Owner-approved
-  App and installation permission update is a hard gate, not a code workaround.
-- Target native setup PR8 was independently reviewed and normally merged. The
-  target's current main contains the real Squad profile and setup checker.
-- CLI 1.0.96 is pinned; noninteractive `--agent Squad -p` runs inside the clone,
-  with secret environment protection, no raw logs/export and direct auth/push
-  tool denials. Failed/empty/state-only/out-of-scope work cannot open a PR.
-- Smoke publication requires actual README-only changed-file work and rejects
-  runtime credentials/token/PEM patterns. No fallback artifact is generated.
-- `infra/bicep/owned-runtime.bicep` is a proposed two-existing-job repair envelope,
-  not a new platform deployment. Its baseline/state ownership and exact what-if
-  must be independently accepted; any additional baseline properties block use.
-- Terraform source, addresses and provider constraints are unchanged. This
-  focused Bicep envelope must not become an unaccepted second Terraform writer.
-- Owned publisher workflow is manual, main-only and fails closed without owned
-  OIDC/ACR variables. It builds immutable digests but never updates runtime jobs.
-  Original-author ACR/OIDC defaults are removed from fork build automation.
-
-## Placement, scope and cost
-
-- Candidate: reuse existing owned private Corp environment, ACR, queue, MI,
-  Key Vault and exact existing runner/agent jobs. No new Azure resources,
-  network changes, IAM grants, secrets or subscription transfers.
-- Exact private bindings remain in private operator evidence. Parent must
-  accept placement and resource/state ownership; this public plan is not GO.
-- One admitted smoke: at most one runner execution and one agent execution,
-  600-second overall supervision, zero retries, agent max=1/min=0.
-- Conservative workload ceiling: 1,200 vCPU-seconds and 2,400 GiB-seconds at
-  1 vCPU/2Gi each, plus separately counted ACR build/storage/log costs.
-- No new workload incurred during preparation. No price/cost reservation is
-  claimed. Parent must reserve incremental cost under the USD2,500 tenant cap.
-- Stop only exact newly recorded execution IDs in finally, never all executions.
-
-## Functional verification
-
-- Backend: executable offline Azure/GitHub/Copilot mocks exercise the production
-  entrypoint and fresh runner bootstrap, including real local Git README diffs.
-- Negative contracts: expired/static token, missing App admin, registration
-  denial, absent profile, missing native agent, nonzero-with-diff, empty work,
-  out-of-scope file changes, secret content, stale revision and deadline.
-- UI: not applicable.
-- Bicep: local compiler 0.47.16 compiles the focused envelope without diagnostics.
-- Docker: installed client cannot connect to an existing Linux daemon; no daemon
-  installed/started, no image built, no immutable runtime image qualified yet.
-- Tests prove source contracts only; they do not prove MI secret access,
-  GitHub permissions, Copilot entitlement or a real hosted execution.
-
-## Deployment holds and next gate
-
-1. Parent independent owned-fork source review and normal source promotion.
-2. Owner-approved App Administration permission/installation update.
-3. Exact existing-job baseline/state ownership and accepted cost reservation.
-4. Qualified owned publisher authority, accepted immutable images and regional
-   service validation/what-if.
-5. azure-validate and parent deployment acceptance before azure-deploy.
-6. Reuse sole target issue7/queued workflow, capture genuine bot README PR;
-   preserve original source and all unrelated runtime resources.
+- Executable synthetic App/queue/native fixtures use real local Git; protected
+  values and full issue payloads cannot appear in logs or queue messages.
+- Positive poller metadata/queue-before-label and worker label-race recovery
+  contracts are tested, alongside expiry, permission failures, existing work,
+  uncertain queue acceptance, invalid scope and duplicate-attempt rejection.
+- All previous genuine-work/native failure/README/secret/revision contracts stay.
+- Bicep compilation and compiled payload assertions verify Schedule60/Event600,
+  zero retries, identity scaler, min0/max1 and preserved workload-profile input.
+- Source CI container job builds actual image/tooling and both entrypoints
+  without a credential or private input. Exact results are in private receipt.
+- UI not applicable. Local mocked/CI builds do not prove live MI secret access,
+  Copilot entitlement, private ACR publishing or Azure deployment acceptance.
 
 ## All validation checks pass
 
-- [x] Local source compilation and offline contract verification.
-- [ ] Core validation (CLI, auth, build, service validate, what-if) using the
-  azure-validate helper with the focused Bicep template and exact private
-  parameters; BLOCKED by unaccepted images/state ownership/source/scope.
-- [ ] Optional lint: compiler diagnostics checked locally; configured broader
-  estate linting is not changed or represented as validated.
-- [ ] Azure Policy Validation for the exact accepted subscription/resource group.
-- [ ] Container image build, startup and immutable digest qualification.
-- [ ] Static/live role verification, App permission and installation acceptance.
+- [x] Local source syntax/tests/compiled Bicep contract.
+- [ ] Accepted container build and immutable private publication receipt.
+- [ ] Core CLI/auth/service validate/what-if for exact private scope.
+- [ ] Azure policy validation and actual budget reservation.
+- [ ] Existing-state ownership and complete baseline preservation.
+- [ ] Live MI App/queue and Copilot entitlement qualification inside accepted Jobs.
+- [ ] Actual genuine hosted execution/PR proof and exact cleanup.
 
-## Section 7: Validation Proof
-
-- `python -m unittest discover -s tests -p "test_*.py" -v`: executable synthetic
-  issue/runner/revision/negative contracts pass locally. Final counts are in the
-  private implementation receipt and source CI; no real external effects.
-- Bash 5.3.15 syntax checks: all four production shell scripts pass.
-- `bicep build infra\bicep\owned-runtime.bicep --stdout`: exit 0, Bicep 0.47.16,
-  no compiler diagnostics. Static payload tests verify bounded job properties.
-- `git diff --check`: exit 0.
-- Docker client: daemon unavailable, image build BLOCKED; no daemon changes.
-- Service validate, what-if, policy checks and live authority checks: NOT RUN;
-  no exact deployment approval or immutable images. Plan is NOT Validated.
+No App permission approval is a prerequisite for this architecture. No plan is
+marked Validated while any real gate is missing; no deploy skill/apply occurs.

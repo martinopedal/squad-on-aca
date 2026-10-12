@@ -2,14 +2,18 @@
 
 Fork of [haflidif/squad-on-aca](https://github.com/haflidif/squad-on-aca),
 created by [@haflidif](https://github.com/haflidif), under the original MIT
-license. This owned fork fixes fresh ephemeral runner registration, native Squad
-discovery and failure reporting for our hosted demo; it does not change or
+license. This owned fork replaces the broken private enqueue-runner dependency
+with a least-privilege scheduled issue poller and fixes native Squad discovery
+and failure reporting for our hosted demo; it does not change or
 diagnose Haflidi's original working deployment. See the
 [owned runtime repair and deployment gates](docs/owned-runtime.md).
 
-> Run [Squad](https://bradygaster.github.io/squad/) AI agents on Azure Container App Jobs — **$0 idle cost**, full multi-agent orchestration.
+> Run [Squad](https://bradygaster.github.io/squad/) AI agents on Azure Container App Jobs — **scale-to-zero event workers**, full multi-agent orchestration.
 
-Label a GitHub issue with `squad:{agent-name}`, and a serverless container wakes up, analyzes the issue, writes code, and opens a pull request. When it's done, it shuts down. You only pay when agents are actively working.
+Label the approved owned issue with its configured `squad:{agent-name}` label.
+A private scheduled poller enqueues bound metadata, then the event worker invokes
+real Squad and opens a PR only for genuine successful work. Workers shut down;
+polling ticks and shared infrastructure are separately accounted.
 
 Built on [Squad](https://bradygaster.github.io/squad/) · [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-cli) · [Azure Container App Jobs](https://learn.microsoft.com/en-us/azure/container-apps/jobs) · [KEDA](https://keda.sh/) · [GitHub Apps](https://docs.github.com/en/apps/creating-github-apps)
 
@@ -20,8 +24,8 @@ Built on [Squad](https://bradygaster.github.io/squad/) · [GitHub Copilot CLI](h
 ```
 GitHub Issue (squad:{agent-name} label)
     ↓
-GitHub Actions Workflow
-  (OIDC auth → zero secrets)
+Private Scheduled ACA Poller
+  (existing MI + target-scoped App token; no runner registration)
     ↓
 Azure Storage Queue
   (message broker)
@@ -39,10 +43,10 @@ Copilot CLI (--yolo)
   (read issue → analyze → code changes)
     ↓
 Pull Request
-  (created by squad-aca-bot[bot])
+  (created by the actual configured App bot)
     ↓
-Enriched PR Body
-  (agent summary, commits, decisions)
+Sanitized PR Receipt
+  (numeric native success + genuine commit)
 ```
 
 → See [Architecture deep-dive](docs/architecture.md) for sequence diagrams, component details, and the entrypoint decision tree.
@@ -51,7 +55,7 @@ Enriched PR Body
 
 ## Key Features
 
-✅ **$0 Idle Cost** — Containers only run when issues are labeled. No background processes, no always-on VMs.
+✅ **Scale-to-Zero Workers** — Event workers run only for queued work. The lightweight five-minute poller is bounded and billed separately; no always-on VM.
 
 ✅ **Full Squad Multi-Agent Orchestration** — Each container runs the full Squad framework. Agents read `.squad/team.md`, dispatch work, and persist learnings.
 
@@ -117,6 +121,12 @@ az keyvault secret set --vault-name "${KV_NAME}" --name "copilot-pat" --value "Y
 
 ### 5. Test It
 
+For this owned private demo, use the reviewed scheduled-poller path in
+[Owned runtime repair](docs/owned-runtime.md): preserve the sole approved issue,
+retire the target enqueue workflow through a normal PR, and qualify the existing
+two-job repair before deployment. No App Administration permission is needed.
+The following original workflow recipe remains an optional historical path:
+
 1. Copy `agents/workflows/squad-queue.yml` to your target repo's `.github/workflows/`
 2. Label any issue with `squad:{agent-name}` (agent names from `.squad/team.md`)
 3. Watch: workflow runs → container spins up → PR gets created!
@@ -126,6 +136,10 @@ az keyvault secret set --vault-name "${KV_NAME}" --name "copilot-pat" --value "Y
 ---
 
 ## Cost Model
+
+The table below is historical upstream guidance, not a current regional quote
+or a cost reservation for this fork's scheduled polling. See
+[bounded poller/worker accounting](docs/owned-runtime.md#focused-existing-job-iac-and-live-receipt).
 
 | Component | Cost | Notes |
 |-----------|------|-------|

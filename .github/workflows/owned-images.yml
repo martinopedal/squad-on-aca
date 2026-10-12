@@ -14,13 +14,16 @@ concurrency:
 jobs:
   build:
     if: github.repository == 'martinopedal/squad-on-aca' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    # This optional label must identify an already accepted private publisher.
+    # No such route is currently qualified; do not create a runner or new IAM.
+    runs-on: [self-hosted, squad-owned-private-publisher]
     environment: owned-runtime
     env:
       ACR_NAME: ${{ vars.SQUAD_ACR_NAME }}
       AZURE_CLIENT_ID: ${{ vars.SQUAD_PUBLISH_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ vars.SQUAD_AZURE_TENANT_ID }}
       AZURE_SUBSCRIPTION_ID: ${{ vars.SQUAD_AZURE_SUBSCRIPTION_ID }}
+      PRIVATE_PUBLISHER_ACCEPTED: ${{ vars.SQUAD_PRIVATE_PUBLISHER_ACCEPTED }}
     steps:
       - uses: actions/checkout@v4
       - name: Require qualified owned publisher settings
@@ -29,6 +32,7 @@ jobs:
           : "${AZURE_CLIENT_ID:?Owned publisher identity is not configured}"
           : "${AZURE_TENANT_ID:?Owned tenant is not configured}"
           : "${AZURE_SUBSCRIPTION_ID:?Owned subscription is not configured}"
+          test "$PRIVATE_PUBLISHER_ACCEPTED" = true
       - name: Verify offline runtime contracts
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - uses: azure/login@v2
@@ -46,10 +50,5 @@ jobs:
             --image "squad-agent:$GITHUB_SHA" --query digest -o tsv)
           [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           agent="$registry/squad-agent@$digest"
-          az acr build --registry "$ACR_NAME" --image "github-runner:$GITHUB_SHA" \
-            --build-arg "SQUAD_AGENT_IMAGE=$agent" agents/runner
-          runner_digest=$(az acr repository show --name "$ACR_NAME" \
-            --image "github-runner:$GITHUB_SHA" --query digest -o tsv)
-          [[ "$runner_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-          printf 'Accepted source: %s\nAgent image: %s\nRunner image: %s\n' \
-            "$GITHUB_SHA" "$agent" "$registry/github-runner@$runner_digest" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Accepted source: %s\nAgent and poller image: %s\n' \
+            "$GITHUB_SHA" "$agent" >> "$GITHUB_STEP_SUMMARY"

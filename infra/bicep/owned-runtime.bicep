@@ -2,11 +2,12 @@ targetScope = 'resourceGroup'
 
 @description('Exact existing owned job bindings. Qualification must verify both jobs exist; this template is not a new-environment deployment.')
 param jobs {
-  runnerName: string
+  pollerName: string
   agentName: string
   location: string
-  runnerTags: object
+  pollerTags: object
   agentTags: object
+  workloadProfileName: string
 }
 
 @description('Existing environment and identity names in this resource group. No network, identity or RBAC resources are created.')
@@ -18,7 +19,6 @@ param hosting {
 
 @description('Immutable digest references, qualified before deployment. Neither image may use latest or another mutable tag.')
 param images {
-  runner: string
   agent: string
 }
 
@@ -33,7 +33,9 @@ param routing {
   copilotSecretName: string
   storageAccount: string
   queueName: string
-  runnerLabels: string
+  pollIssueNumber: string
+  pollAgent: string
+  pollStopAfterUtc: string
 }
 
 resource environment 'Microsoft.App/managedEnvironments@2025-01-01' existing = {
@@ -53,32 +55,45 @@ var commonEnv = [
   { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
 ]
 
-resource runner 'Microsoft.App/jobs@2025-01-01' = {
-  name: jobs.runnerName
+resource poller 'Microsoft.App/jobs@2025-01-01' = {
+  name: jobs.pollerName
   location: jobs.location
-  tags: jobs.runnerTags
+  tags: jobs.pollerTags
+  // Enqueue must not begin while the old fallback-capable worker is deployed.
+  dependsOn: [agent]
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: { '${identity.id}': {} }
   }
   properties: {
     environmentId: environment.id
+    workloadProfileName: jobs.workloadProfileName
     configuration: {
-      triggerType: 'Manual'
-      replicaTimeout: 600
+      triggerType: 'Schedule'
+      replicaTimeout: 60
       replicaRetryLimit: 0
-      manualTriggerConfig: { parallelism: 1, replicaCompletionCount: 1 }
+      scheduleTriggerConfig: {
+        cronExpression: '*/5 * * * *'
+        parallelism: 1
+        replicaCompletionCount: 1
+      }
       secrets: []
       registries: [{ server: hosting.registryServer, identity: identity.id }]
     }
     template: {
       containers: [{
-        name: 'runner'
-        image: images.runner
-        resources: { cpu: 1, memory: '2Gi' }
+        name: 'poller'
+        image: images.agent
+        command: ['/usr/bin/timeout']
+        args: ['--signal=TERM', '--kill-after=5s', '50s', '/poller-entrypoint.sh']
+        resources: { cpu: json('0.25'), memory: '0.5Gi' }
         env: concat(commonEnv, [
-          { name: 'GITHUB_REPO', value: routing.targetRepo }
-          { name: 'LABELS', value: routing.runnerLabels }
+          { name: 'SQUAD_TARGET_REPO', value: routing.targetRepo }
+          { name: 'SQUAD_POLL_ISSUE_NUMBER', value: routing.pollIssueNumber }
+          { name: 'SQUAD_POLL_AGENT', value: routing.pollAgent }
+          { name: 'SQUAD_POLL_STOP_AFTER_UTC', value: routing.pollStopAfterUtc }
+          { name: 'AZURE_STORAGE_ACCOUNT', value: routing.storageAccount }
+          { name: 'QUEUE_NAME', value: routing.queueName }
         ])
       }]
     }
@@ -95,6 +110,7 @@ resource agent 'Microsoft.App/jobs@2025-01-01' = {
   }
   properties: {
     environmentId: environment.id
+    workloadProfileName: jobs.workloadProfileName
     configuration: {
       triggerType: 'Event'
       replicaTimeout: 600
@@ -131,6 +147,8 @@ resource agent 'Microsoft.App/jobs@2025-01-01' = {
           { name: 'QUEUE_NAME', value: routing.queueName }
           { name: 'COPILOT_TOKEN_SECRET_NAME', value: routing.copilotSecretName }
           { name: 'SQUAD_TARGET_REPO', value: routing.targetRepo }
+          { name: 'SQUAD_POLL_ISSUE_NUMBER', value: routing.pollIssueNumber }
+          { name: 'SQUAD_POLL_AGENT', value: routing.pollAgent }
           { name: 'SQUAD_README_ONLY', value: 'true' }
           { name: 'SQUAD_TIMEOUT_SECONDS', value: '480' }
         ])
@@ -139,8 +157,8 @@ resource agent 'Microsoft.App/jobs@2025-01-01' = {
   }
 }
 
-@description('Exact existing owned runner job ID; not an execution receipt.')
-output runnerJobId string = runner.id
+@description('Exact existing owned runner job repurposed as a poller; not an execution receipt.')
+output pollerJobId string = poller.id
 
 @description('Exact existing owned agent job ID; not an execution receipt.')
 output agentJobId string = agent.id

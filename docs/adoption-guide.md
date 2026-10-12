@@ -1,5 +1,10 @@
 # Adoption Guide
 
+This page preserves the optional upstream deployment/workflow recipe. The
+owned private fork's current scheduled-poller path and existing-resource gates
+are documented in [Owned runtime repair](owned-runtime.md); it does not require
+an App Administration grant or a self-hosted enqueue runner.
+
 > Step-by-step guide to deploying Squad on ACA for your organization. Follow these steps in order.
 
 ---

@@ -8,7 +8,7 @@ github_request() {
     printf 'header = "Authorization: Bearer %s"\n' "${credential}"
     printf 'header = "Accept: application/vnd.github+json"\n'
     printf 'header = "X-GitHub-Api-Version: 2022-11-28"\n'
-  } | curl --silent --fail --connect-timeout 15 --max-time 45 \
+  } | curl --silent --fail --connect-timeout 5 --max-time "${GITHUB_HTTP_TIMEOUT_SECONDS:-45}" \
       --config - --request "${method}" --url "${url}" \
       --data "${body}" 2>/dev/null
 }
@@ -25,15 +25,26 @@ github_app_token() {
   payload=$(jq -cn --arg iss "${GITHUB_APP_ID}" --argjson now "${now}" \
     '{iat: ($now - 60), exp: ($now + 540), iss: $iss}' \
     | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-  signature=$(printf '%s' "${header}.${payload}" | openssl dgst -sha256 -sign <(printf '%s\n' "${pem}") \
+  signature=$(printf '%s' "${header}.${payload}" | openssl dgst -sha256 -sign <(printf '%s\n' "${pem}") 2>/dev/null \
     | openssl base64 -e -A | tr '+/' '-_' | tr -d '=') || return 1
   jwt="${header}.${payload}.${signature}"
   request=$(jq -cn --arg repo "${repo#*/}" --arg permission "${permission}" \
-    '{repositories: [$repo]} + (if $permission == "runner" then {permissions: {administration: "write"}} else {} end)')
+    '{repositories: [$repo]} + (if $permission == "runner" then {permissions: {administration: "write"}}
+      elif $permission == "poller" then {permissions: {issues: "write", contents: "read", pull_requests: "read"}}
+      else {} end)')
   response=$(github_request POST \
     "https://api.github.com/app/installations/${GITHUB_APP_INSTALLATION_ID}/access_tokens" \
     "${jwt}" "${request}") || return 1
   unset pem jwt signature
+  if [[ "${permission}" == "poller" ]]; then
+    local expires
+    expires=$(printf '%s' "${response}" | jq -er '.expires_at' 2>/dev/null) || return 1
+    expires=$(date -d "${expires}" +%s 2>/dev/null) || return 1
+    (( expires > $(date +%s) + 60 )) || return 1
+    printf '%s' "${response}" | jq -e \
+      '.permissions.issues == "write" and .permissions.contents == "read"
+       and .permissions.pull_requests == "read" and (.permissions.administration == null)' >/dev/null 2>&1 || return 1
+  fi
   printf '%s' "${response}" | jq -er '.token | select(type == "string" and length > 0)' 2>/dev/null
 }
 

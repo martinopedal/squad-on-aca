@@ -1,141 +1,140 @@
-# Owned hosted runtime repair
+# Owned hosted runtime: private issue polling
 
-This MIT fork credits [@haflidif](https://github.com/haflidif) and retains the
-upstream copyright and license. The original service is not a deployment target.
-These changes concern an independently owned Apps/Jobs demo, not native ACA
-Sandboxes. Source tests are not an end-to-end hosted success receipt.
+This MIT fork credits [@haflidif](https://github.com/haflidif) and preserves the
+original copyright. It changes our independently owned Apps/Jobs demo, not
+Haflidi's original working deployment or native ACA Sandboxes.
 
-## One pipeline, two jobs
+## Current pipeline: no runner registration or new App permissions
 
-The existing target issue workflow waits for a private-network self-hosted
-enqueue runner. That manual ACA Job must register before the workflow can put
-the issue on the queue. KEDA then starts the separate Squad agent Job.
+```mermaid
+flowchart LR
+  I["Approved owned issue<br/>squad:ripley"] --> P["Private scheduled ACA poller<br/>one issue / five minutes"]
+  KV["Existing Key Vault App PEM"] -->|existing MI| P
+  P -->|"durable accepted metadata"| Q["Existing Storage Queue"]
+  P -->|"then processing label"| I
+  Q --> K["KEDA event job<br/>min0 / max1"]
+  K --> S["Real target Squad 1.0.1<br/>Copilot CLI 1.0.96"]
+  S --> G["Numeric success + genuine<br/>README-only diff + secret guards"]
+  G --> PR["Actual configured App bot PR"]
+```
 
-The runner image extends a qualified agent image. On each startup it uses its
-existing UAMI to read the existing App PEM inside the container, signs a short
-JWT, requests an installation token scoped to the target repository and
-`administration:write`, and immediately obtains a fresh repository registration
-token. A stored `RUNNER_TOKEN` is explicitly rejected. Secrets never enter IaC,
-ARM environment values, public build arguments or curl process arguments.
-The standard runner reads the token via `ACTIONS_RUNNER_INPUT_TOKEN`, which is
-unset immediately after configuration; its standard ephemeral runtime
-credentials are confined to the execution filesystem.
+The poller uses the existing UAMI and Key Vault App key, signing a short JWT
+inside the container. Its target-restricted installation token requests only
+Issues: write, Contents: read and Pull requests: read. Expired or unexpectedly
+Administration-enabled responses are rejected. No Copilot credential is read by
+the poller. Protected HTTP headers travel on stdin, never argv or ARM metadata.
 
-**GitHub gate:** repo runner registration requires the installed App's
-Administration: write permission. Contents/Issues/Pull requests permissions do
-not imply it. The owned demo App's public metadata currently lacks this
-permission. The App owner must approve the permission and installation update
-through GitHub's normal settings/approval flow. The code cannot grant it and
-fails closed on denial. No presenter PAT or host OAuth is substituted.
-An alternative queue transport would need a separately accepted private-network
-design; changing the target to a public runner does not solve private reachability.
+Public configuration fixes the target repository, issue number and agent; the
+poller reads only that issue, not an arbitrary issue search. Closed/unlabeled,
+processing/attempted/queued, existing branch and existing PR cases do not enqueue.
+A nonempty queue defers the poll without purging or modifying pending work.
+Permission/read failures are errors, not evidence that a branch or PR is absent.
 
-The agent uses the same protected startup pattern but does not request runner
-Administration permission. Copilot gets only its existing licensed credential
-through `COPILOT_GITHUB_TOKEN`; App tokens are removed from its environment.
-The verified CLI 1.0.96 is pinned and automatic updates are disabled. Its native
-secret-environment control strips the Copilot credential and MI header secrets
-from shell/MCP child environments and redacts their output. CLI logging and
-remote session export are disabled; direct Azure/GitHub/curl/wget/push tool
-calls are denied. The publication guard also rejects known runtime credentials
-and common token/PEM patterns in the complete diff. Repository Git hooks and
-external diff drivers are disabled in the trusted wrapper.
-`GITHUB_APP_SLUG` is public configuration and must resolve to the configured
-App ID. The wrapper reads that App's actual bot user ID and uses its bot login
-for commit identity, rather than impersonating the original author's bot.
-The clone is the current target default branch, and native `Squad` runs from
-that working directory with `-p`, not interactive piped input. The real tracked
-`.github/agents/squad.agent.md` and `.squad/team.md` must exist; if the target's
-native setup checker exists, it must pass. The wrapper never synthesizes profiles.
+Only accepted queue writes precede `squad:processing`. The message contains
+issue/agent/repository/source metadata, not issue body, title, credentials or a
+prompt. It has a 600-second TTL and ten-second initial visibility delay.
+Queue write failure or uncertain acknowledgement never marks processing.
+If label acknowledgement fails or the worker wins the cross-service race,
+the worker can claim only this expressly configured poller issue. With the
+accepted event-job max1 it sets `squad:attempted` before native work, so sequential
+duplicate messages cannot rerun an already attempted issue. Failed work keeps
+its claim for explicit repair/retry; no automatic success or fallback PR.
+Storage/GitHub are not one transaction; this is guarded at-least-once handoff,
+not a claim of universal exactly-once delivery under arbitrary concurrency.
 
-Every native call has a numeric exit receipt and a deadline. Nonzero exits
-(including missing-agent errors), empty diffs and state/artifact-only diffs
-cannot push or create a PR. README smoke mode additionally requires the whole
-PR diff to contain exactly changed `README.md`. Issue/review JSON is task data,
-not permission to read secrets, publish, merge or deploy. Raw model/tool output
-is discarded rather than copied into PRs, logs or fallback artifacts.
-The wrapper still uses powerful CLI tools; these boundaries are not an OS-level
-sandbox and do not replace trusted repository instructions and private egress policy.
+The poller runs under a 50-second process deadline and 60-second ACA replica
+timeout, zero retries, one replica, on a five-minute UTC schedule. A required
+UTC cutoff prevents authentication/queue activity after the accepted window.
+Scheduled ticks still incur small runtime overhead after that cutoff, so the
+accepted cleanup plan must retire the schedule through the same reviewed IaC;
+the cutoff is not a substitute for schedule retirement or cost accounting.
 
-Queue acknowledgement retains upstream's one-attempt semantics. Failed work
-requires an explicit operator retry after repair; it is not automatic success.
-New and revision flows retain dedup, current-head checks and lifecycle labels.
+## Genuine native work and protected publication
 
-## Build and source verification
+The worker keeps the existing protected App/Copilot split. Pinned Copilot CLI
+1.0.96 runs `--agent Squad -p` from the current target default-branch clone.
+The tracked genuine Squad profile and team must exist, and the target's native
+setup checker must pass. No profile or team is synthesized. The configured App
+slug/ID and actual bot user metadata bind commit identity to the owned App.
+
+Copilot's licensed credential and MI header secrets are stripped from shell/MCP
+child environments. Raw model/tool output, CLI logging and remote export are
+disabled. Direct Azure/GitHub/curl/wget/push tools are denied; the wrapper owns
+publication. Git hooks and external diff drivers are disabled.
+Missing agent/setup, nonzero native exits, empty/state-only changes, binary or
+out-of-scope README work, and known credential/PEM/token content cannot push or
+open a PR. Issue/review JSON is untrusted task data, not expanded authority.
+These controls do not replace an OS sandbox, trusted repository instructions
+or the existing private egress policy.
+
+## Optional historical GitHub Actions path
+
+`agents/workflows/squad-queue.yml` remains the upstream workflow template for
+deployments where that original transport is qualified. `agents/runner/` remains
+an optional protected registration implementation, not part of this owned
+poller deployment, source gate or image publisher. Its registration permission
+requirements are deliberately not applied to the current App.
+
+After independent source acceptance, normally review/merge
+`agents/workflows/squad-queue-retired.yml` as the owned target's existing
+`.github/workflows/squad-queue.yml`. It removes issue-triggered enqueue and
+self-hosted runner dependence while retaining a credential-free manual status.
+Cancel only the known old queued run after its zero-step binding is rechecked.
+Do not close the smoke issue, purge its queue, change native assets or dispatch
+another smoke. The optional revision template is unchanged.
+
+## Real container build without host or Azure credentials
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
-Tests use synthetic local fixtures and mocked Azure/GitHub/Copilot commands;
-they do not read secrets or create resources. CI runs the same tests on Linux.
+CI runs executable synthetic Azure/GitHub/Copilot fixtures and real local Git
+diff tests. A separate Ubuntu job builds the actual shared base/worker/poller
+runtime using explicit public upstream Go/Debian base-image references, no Azure
+credentials or private inputs, and no push. It tests installed CLI/tooling,
+both installed entrypoints, expired-window poller startup and fail-closed worker
+startup. The worker and poller use the same image with different entrypoints.
+No Windows Docker service, daemon, license or OS feature is changed.
 
-Build the existing base context, then the runner context with an immutable
-`SQUAD_AGENT_IMAGE` digest. Supply the exact runner release version and verified
-Linux x64 SHA256 from
-[the official runner release](https://github.com/actions/runner/releases).
-The defaults pin 2.338.0 and its official SHA256; requalify any version override.
-An explicitly empty checksum fails the build; do not use an unverified checksum.
-The existing base-image cache host is a build argument; never use the original
-author's registry as a fallback for this fork. Pass the owned existing registry
-host explicitly. Build labels credit upstream while identifying this fork.
-No host Docker daemon is installed or started by this change.
+Private publishing remains a separate gate. The owned ACR is private; public
+Ubuntu reachability and inherited original OIDC credentials are not assumed.
+Read-only qualification found no existing ACR Task or private agent pool.
+A qualified existing private publisher or accepted owner-authenticated trusted
+ACR transient build path must be established using existing authority before
+any image push. No standing pool, network opening, new role or App permission
+is proposed. Credential-free CI build success is not a private push receipt.
 
-## Focused existing-runtime IaC
+## Focused existing-job IaC and live receipt
 
-`infra/bicep/owned-runtime.bicep` is a focused **existing-job repair** envelope
-using the upstream Jobs API version. It reuses environment, registry, identity,
-queue and Key Vault by public metadata, without creating network/IAM/storage
-resources. It changes only the two accepted owned job definitions. It is not a
-replacement for the upstream Terraform or azd deployment recipe, and must not
-be used to take over a Terraform-managed resource without an accepted state
-ownership decision. Existing Terraform addresses/providers are unchanged.
+`infra/bicep/owned-runtime.bicep` preserves the upstream Jobs API version and
+reuses the exact existing environment, registry, queue, UAMI and Key Vault.
+It repurposes the broken owned runner Job ID as the poller, updates the separate
+worker, preserves supplied tags/workload profile and adds no network/IAM/storage
+resource. Explicit ordering updates the trusted worker before enabling polling.
+The old job being user-created and untagged does **not** prove it has no Terraform
+owner. Exact baseline, state ownership, existence and what-if remain mandatory.
+If ownership forbids repurposing, stop and qualify a separately reviewed minimal
+alternative; do not silently create a duplicate resource or become a second writer.
 
-Before using it, independent review must accept **all** of these gates:
+Existing MI role metadata proves queue add through Message Sender, peek through
+Data Reader, processing through Message Processor, protected reads through
+Secrets User, and ACR pull/push. It does not prove live secret access, licensing
+or publishing connectivity. Caller Key Vault denial is not a job-MI failure.
 
-1. Both exact jobs already exist in the accepted owned resource group; names,
-   location, tags, environment, container resources, workload profile, identity,
-   registry and scaler metadata match the reviewed baseline. If the baseline has
-   secret references, sidecars or additional properties absent from this envelope,
-   stop and extend it through review; do not erase them.
-2. State/IaC ownership is accepted. The envelope is not permission for a second
-   writer or a generic deployment into a new resource group.
-3. Target native setup source is independently approved and normally merged.
-   Preserve the existing issue and queued workflow; do not create another smoke.
-4. App installation scope, owner-approved Administration permission, existing
-   MI secret reads, Copilot entitlement and private egress are qualified.
-   Caller Key Vault denial does not establish failure of the job's MI.
-5. Both images are accepted immutable `@sha256:` references in the existing
-   owned ACR. Source CI/image publishing needs its own approved identity, trust
-   and AcrPush authorization; inherited original OIDC settings cannot be used.
-6. The plan permits only the two exact job updates: runner timeout 600s and no
-   retries; agent max=1/min=0/timeout=600s/no retries. No new environment/network,
-   secrets, roles, subscriptions or broad access changes.
-7. `azure-validate` completes; parent accepts source and exact deployment
-   qualification before `azure-deploy`. No imperative image/template/secret edits.
+Only after source review, immutable images, target workflow retirement,
+state/baseline, policy, cost and `azure-validate` acceptance may `azure-deploy`
+change these two exact jobs. Record the sole existing issue → exact poller
+execution → durable queue handoff → exact event worker → numeric native return →
+actual bot README diff/commit PR. No fallback or native-sandbox substitution.
 
-Bicep resources can create a missing resource; the explicit existence/what-if
-gate is mandatory. This source envelope alone does not prove Azure acceptance
-or authorize an apply. The tracked preparation plan contains only public scope;
-actual existing bindings belong in private operator evidence.
+One admitted poller iteration at 0.25 vCPU/0.5Gi for at most 60s plus one worker
+at 1 vCPU/2Gi for at most 600s gives a conservative **615 vCPU-seconds and
+1,230 GiB-seconds** workload ceiling, excluding builds/log/storage and other
+scheduled ticks. Reserve the actual regional cost under the tenant cap.
+Supervise for at most 600s and stop only newly recorded exact executions; retire
+the accepted poll schedule through reviewed IaC rather than stopping all jobs.
 
-## Bounded live receipt, after all gates
-
-Use the sole existing README smoke issue and queued workflow. Record:
-issue URL → original workflow/run and runner registration → enqueue step →
-queue receipt → exact new agent execution → numeric native result → bot PR
-with an actual README diff and commit. Verify bot identity and issue linkage.
-No empty/state-only/fallback PR is acceptable.
-
-At most one runner execution and one agent execution are admitted for one smoke.
-At 1 vCPU/2Gi for at most 600s each, the workload ceiling is 1,200 vCPU-seconds
-and 2,400 GiB-seconds, excluding image build/storage/log ingestion. Obtain the
-accepted regional rate/cost reservation before launching; this is not a price
-quote. Shared ACR and Key Vault are reused, not free or duplicated.
-Stop only the exact newly recorded execution IDs in `finally` at the 600-second
-supervision deadline, even if GitHub is still queued. Do not stop all jobs.
-
-**Current status:** source readiness only. Target native setup PR8 was normally
-merged after independent review; the target's real Squad profile is now on main.
-Owned runtime source approval, App permission approval, immutable image build, existing-resource/state ownership review,
-Azure deployment acceptance and a genuine hosted PR receipt remain required.
+**Status:** source preparation and credential-free build verification only.
+No live poller, queue mutation, App permission change or genuine hosted PR is
+claimed before the deployment gates pass.

@@ -17,7 +17,33 @@ See [Terraform vs Bicep and azd: which should you choose?](adoption-guide.md#ter
 
 ## End-to-End Flow
 
-The following sequence diagram traces a complete lifecycle from issue labeling through PR creation and the `/squad revise` feedback loop.
+The owned private fork uses this scheduled-poller flow. It reuses existing
+Issues/Contents/Pull requests App permissions, not runner Administration.
+
+```mermaid
+sequenceDiagram
+    participant Issue as Sole approved owned issue
+    participant Poller as Private scheduled ACA Job
+    participant KV as Existing Key Vault
+    participant Queue as Existing Storage Queue
+    participant Worker as KEDA event ACA Job
+    participant Squad as Real target Squad
+    participant PR as Genuine README bot PR
+    Poller->>KV: Existing MI reads App PEM inside job
+    Poller->>Issue: Narrow target App token; read bound issue/labels
+    Poller->>Issue: Dedup processing/attempted, branch and PR
+    Poller->>Queue: MI peek; accepted metadata put, TTL600/delay10
+    Poller->>Issue: Only then add processing
+    Queue->>Worker: KEDA min0/max1 starts event execution
+    Worker->>Issue: Bound race recovery; mark native attempt once
+    Worker->>Squad: Real profile/checker; protected noninteractive CLI
+    Squad-->>Worker: Numeric native return and actual changed files
+    Worker->>PR: Success + README/secret guards; actual configured App
+```
+
+See [owned runtime gates and cost](owned-runtime.md). The following diagram
+preserves the optional original GitHub Actions transport and revision recipe;
+it is not the owned private demo's enqueue dependency:
 
 ```mermaid
 sequenceDiagram
@@ -63,10 +89,10 @@ sequenceDiagram
     Job->>GH: Clone repo, create branch<br/>squad/{agent-name}/issue-42
     Job->>GH: Fetch issue title + body
     Job->>Copilot: copilot --agent Squad -p task data (protected environment)
-    Note over Job,Copilot: Token swap: GITHUB_TOKEN = Copilot PAT
+    Note over Job,Copilot: Copilot credential isolated; App token removed
     Copilot->>Copilot: Read .squad/team.md, route to @{agent-name}
     Copilot->>Job: Code changes + commits
-    Note over Job,Copilot: Token swap back: GITHUB_TOKEN = App token
+    Note over Job,Copilot: Trusted wrapper retains App authority
     Job->>GH: git push origin squad/{agent-name}/issue-42
     Job->>PR: gh pr create (enriched body)
     Job->>GH: Swap labels: processing → queued

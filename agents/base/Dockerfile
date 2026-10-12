@@ -8,7 +8,9 @@
 # Pass at build time: az acr build --build-arg BASE_ACR_HOST=myacr.azurecr.io/ ...
 # An unconfigured owned build must not contact the original author's registry.
 ARG BASE_ACR_HOST=registry-not-configured.invalid/
-FROM ${BASE_ACR_HOST}base/golang:1.23.4-bookworm AS build
+ARG GO_BASE_IMAGE=${BASE_ACR_HOST}base/golang:1.23.4-bookworm
+ARG DEBIAN_BASE_IMAGE=${BASE_ACR_HOST}base/debian:bookworm-20240701-slim
+FROM ${GO_BASE_IMAGE} AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -38,7 +40,7 @@ RUN npm install -g "@github/copilot@${COPILOT_VERSION}"
 # Stage 2: Runtime — slim image with only what we need
 # =============================================================================
 # Import once: az acr import --name <acr-name> --source docker.io/library/debian:bookworm-20240701-slim --image base/debian:bookworm-20240701-slim
-FROM ${BASE_ACR_HOST}base/debian:bookworm-20240701-slim AS runtime
+FROM ${DEBIAN_BASE_IMAGE} AS runtime
 
 LABEL maintainer="Haflidi Fridthjofsson"
 LABEL org.opencontainers.image.description="Squad agent runtime for Azure Container App Jobs"
@@ -76,6 +78,7 @@ WORKDIR /workspace
 
 COPY entrypoint.sh /entrypoint.sh
 COPY github-app.sh runtime-contract.sh /
-RUN chmod +x /entrypoint.sh
+COPY poller-entrypoint.sh /poller-entrypoint.sh
+RUN chmod +x /entrypoint.sh /poller-entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]

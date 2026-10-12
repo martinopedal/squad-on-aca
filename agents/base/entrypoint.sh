@@ -33,12 +33,18 @@ MSG_TYPE=$(printf '%s' "${MESSAGE}" | jq -r '.type // "new"') || die "Invalid me
 ISSUE_NUMBER=$(printf '%s' "${MESSAGE}" | jq -r '.issue_number // empty')
 AGENT_TYPE=$(printf '%s' "${MESSAGE}" | jq -r '.agent_type // empty')
 GITHUB_REPO=$(printf '%s' "${MESSAGE}" | jq -r '.repo // empty')
+SOURCE=$(printf '%s' "${MESSAGE}" | jq -r '.source // "workflow"')
 [[ "${MSG_TYPE}" == "new" || "${MSG_TYPE}" == "revise" ]] || die "Invalid message type."
 [[ "${ISSUE_NUMBER}" =~ ^[1-9][0-9]*$ ]] || die "Invalid issue number."
 [[ "${AGENT_TYPE}" =~ ^[A-Za-z0-9_-]+$ ]] || die "Invalid agent name."
 [[ "${GITHUB_REPO}" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "Invalid target repo."
 if [[ -n "${SQUAD_TARGET_REPO:-}" ]]; then
   [[ "${GITHUB_REPO}" == "${SQUAD_TARGET_REPO}" ]] || die "Message repo outside configured target."
+fi
+if [[ "${SOURCE}" == "owned-poller" ]]; then
+  [[ "${MSG_TYPE}" == "new" && "${ISSUE_NUMBER}" == "${SQUAD_POLL_ISSUE_NUMBER:-}" \
+    && "${AGENT_TYPE}" == "${SQUAD_POLL_AGENT:-}" && "${GITHUB_REPO}" == "${SQUAD_TARGET_REPO:-}" ]] \
+    || die "Poller message outside the approved issue/agent binding."
 fi
 
 # Acknowledge one attempt, as upstream does; failures remain failures, not PRs.
@@ -47,7 +53,7 @@ az storage message delete --queue-name "${QUEUE_NAME}" --account-name "${AZURE_S
   --auth-mode login --id "${MSG_ID}" --pop-receipt "${POP_RECEIPT}" -o none >/dev/null 2>&1 \
   || die "Queue acknowledge failed."
 unset RAW_MSG MSG_BODY_B64 POP_RECEIPT
-log "Issue #${ISSUE_NUMBER}; agent=${AGENT_TYPE}; mode=${MSG_TYPE}; repo=${GITHUB_REPO}"
+log "Queue message=${MSG_ID}; issue #${ISSUE_NUMBER}; agent=${AGENT_TYPE}; mode=${MSG_TYPE}; repo=${GITHUB_REPO}"
 
 GITHUB_TOKEN=$(github_app_token "${GITHUB_REPO}") \
   || die "App target token mint denied; verify installation access."
@@ -63,7 +69,7 @@ COPILOT_TOKEN=$(az keyvault secret show --vault-name "${KEY_VAULT_NAME}" \
   || die "Managed Identity Copilot secret read failed."
 [[ -n "${COPILOT_TOKEN}" ]] || die "Copilot secret empty."
 gh auth setup-git >/dev/null 2>&1 || die "Git App credential helper setup failed."
-for label in squad:processing squad:queued squad:revising; do
+for label in squad:processing squad:queued squad:revising squad:attempted; do
   gh label create "${label}" --repo "${GITHUB_REPO}" --force >/dev/null 2>&1 \
     || die "Required lifecycle labels unavailable."
 done
@@ -77,9 +83,24 @@ if [[ "${MSG_TYPE}" == "new" ]]; then
     log "Issue already queued for PR review; skipping."
     exit 0
   fi
-  if ! printf '%s\n' "${LABELS}" | grep -q '^squad:processing$'; then
-    log "Issue no longer marked processing; skipping."
+  if [[ "${SOURCE}" == "owned-poller" ]] && printf '%s\n' "${LABELS}" | grep -q '^squad:attempted$'; then
+    log "Approved polled issue already attempted; no duplicate native run."
     exit 0
+  fi
+  if ! printf '%s\n' "${LABELS}" | grep -q '^squad:processing$'; then
+    if [[ "${SOURCE}" == "owned-poller" ]]; then
+      # Acknowledged queue work may become visible before the poller's label
+      # POST succeeds. Claim only its explicitly approved, still-open issue.
+      STATE=$(gh issue view "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --json state --jq .state) \
+        || die "Poller issue state read failed."
+      [[ "${STATE}" == "OPEN" ]] || die "Polled issue no longer open."
+      printf '%s\n' "${LABELS}" | grep -q "^squad:${AGENT_TYPE}$" || die "Polled agent label removed."
+      gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --add-label squad:processing >/dev/null 2>&1 \
+        || die "Accepted poller work could not be claimed."
+    else
+      log "Issue no longer marked processing; skipping."
+      exit 0
+    fi
   fi
   EXISTING_PR=$(gh pr list --repo "${GITHUB_REPO}" --state open --head "${BRANCH}" --json number --jq '.[0].number // empty') \
     || die "PR dedup read failed."
@@ -88,6 +109,10 @@ if [[ "${MSG_TYPE}" == "new" ]]; then
       --remove-label squad:processing --add-label squad:queued >/dev/null 2>&1 || die "Dedup label update failed."
     log "Existing issue PR found; skipping."
     exit 0
+  fi
+  if [[ "${SOURCE}" == "owned-poller" ]]; then
+    gh issue edit "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --add-label squad:attempted >/dev/null 2>&1 \
+      || die "Polled native-attempt claim failed."
   fi
 else
   PR_NUMBER=$(printf '%s' "${MESSAGE}" | jq -r '.pr_number // empty')

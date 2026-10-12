@@ -20,3 +20,38 @@ jobs:
         run: |
           for script in agents/base/*.sh agents/runner/*.sh; do bash -n "$script"; done
           python -m unittest discover -s tests -p 'test_*.py' -v
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the shared base, worker and poller runtime without credentials
+        run: |
+          docker build --tag squad-worker:ci --tag squad-poller:ci \
+            --build-arg GO_BASE_IMAGE=docker.io/library/golang:1.23.4-bookworm \
+            --build-arg DEBIAN_BASE_IMAGE=docker.io/library/debian:bookworm-20240701-slim \
+            agents/base
+      - name: Verify actual runtime tooling and entrypoints
+        run: |
+          docker run --rm --entrypoint bash squad-worker:ci -c '
+            set -euo pipefail
+            copilot --no-auto-update --version
+            copilot --help | grep -- --secret-env-vars >/dev/null
+            az version >/dev/null
+            gh --version >/dev/null
+            for script in /entrypoint.sh /poller-entrypoint.sh /github-app.sh /runtime-contract.sh; do bash -n "$script"; done
+          '
+          docker run --rm --entrypoint /poller-entrypoint.sh \
+            --env SQUAD_TARGET_REPO=synthetic/fixture \
+            --env SQUAD_POLL_ISSUE_NUMBER=7 --env SQUAD_POLL_AGENT=ripley \
+            --env SQUAD_POLL_STOP_AFTER_UTC=2000-01-01T00:00:00Z \
+            --env AZURE_STORAGE_ACCOUNT=syntheticstorage --env QUEUE_NAME=synthetic-queue \
+            --env AZURE_CLIENT_ID=synthetic-mi --env GITHUB_APP_ID=123 \
+            --env GITHUB_APP_INSTALLATION_ID=456 --env KEY_VAULT_NAME=synthetic-vault \
+            --env KEY_VAULT_SECRET_NAME=synthetic-key squad-poller:ci
+          set +e
+          docker run --rm squad-worker:ci
+          status=$?
+          set -e
+          test "$status" -eq 1
