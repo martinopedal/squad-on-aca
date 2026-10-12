@@ -40,6 +40,7 @@ jobs:
             copilot --help | grep -- --secret-env-vars >/dev/null
             az version >/dev/null
             gh --version >/dev/null
+            python3 -c "from pathlib import Path; compile(Path(\"/readme-publication.py\").read_bytes(), \"/readme-publication.py\", \"exec\")"
             for script in /entrypoint.sh /poller-entrypoint.sh /github-app.sh /runtime-contract.sh; do bash -n "$script"; done
           '
           docker run --rm --entrypoint /poller-entrypoint.sh \

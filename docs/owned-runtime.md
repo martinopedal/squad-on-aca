@@ -57,6 +57,31 @@ The tracked genuine Squad profile and team must exist, and the target's native
 setup checker must pass. No profile or team is synthesized. The configured App
 slug/ID and actual bot user metadata bind commit identity to the owned App.
 
+Every worker message, including historical `workflow` and revision messages,
+must match the configured repository, issue number and agent. The caller's
+`source` field is not authority. Current GitHub state must be OPEN and contain
+the exact configured `squad:{agent}` approval before clone, before native work
+and immediately before push. Processing/attempted/queued labels are only
+lifecycle markers: they never authorize closed or withdrawn work. Attempt dedup
+applies regardless of source. A revision additionally requires the open,
+same-repository, actual-App-bot PR with the exact issue branch/head/base.
+
+The owned worker supports only README publication. After native success it
+ignores the entire model Git directory, including commits, messages, tags,
+replace refs, remotes, configuration and hooks. It creates a fresh controlled
+publisher, fetching only the qualified main ancestry from the fixed configured
+target URL. Main movement fails closed. Final files are compared against the
+qualified tree; only regular, size-bounded UTF-8 README bytes may differ.
+Known credentials and token/PEM patterns are checked in the complete byte
+content, not merely an endpoint diff. Git plumbing imports those bytes without
+filters and creates one constant-message commit with actual App-bot metadata
+and exactly one qualified parent. Only that explicit commit/ref is pushed,
+with a branch-head lease and no tags; model history is never transferred.
+Revisions qualify every previous non-main commit as single-parent,
+README-only, constant-message App-bot history before native execution.
+Untrusted legacy PR history requires independent operator review, not a reset
+or automatic overwrite. These are publication boundaries, not an OS sandbox.
+
 Copilot's licensed credential and MI header secrets are stripped from shell/MCP
 child environments. Raw model/tool output, CLI logging and remote export are
 disabled. Direct Azure/GitHub/curl/wget/push tools are denied; the wrapper owns
@@ -90,7 +115,11 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 CI runs executable synthetic Azure/GitHub/Copilot fixtures and real local Git
-diff tests. A separate Ubuntu job builds the actual shared base/worker/poller
+publication tests. Intermediate dummy credential blobs, credential commit
+messages, wrong model ancestry and malicious model hooks/remotes are tested
+against all received destination objects, not just README endpoints.
+Approval withdrawal and scope spoofing execute the production worker.
+A separate Ubuntu job builds the actual shared base/worker/poller
 runtime using explicit public upstream Go/Debian base-image references, no Azure
 credentials or private inputs, and no push. It tests installed CLI/tooling,
 both installed entrypoints, expired-window poller startup and fail-closed worker

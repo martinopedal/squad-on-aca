@@ -77,7 +77,7 @@ RUN ln -sf /usr/lib/node_modules/@github/copilot/npm-loader.js /usr/local/bin/co
 WORKDIR /workspace
 
 COPY entrypoint.sh /entrypoint.sh
-COPY github-app.sh runtime-contract.sh /
+COPY github-app.sh runtime-contract.sh readme-publication.py /
 COPY poller-entrypoint.sh /poller-entrypoint.sh
 RUN chmod +x /entrypoint.sh /poller-entrypoint.sh
 

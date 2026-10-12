@@ -30,31 +30,66 @@ run_squad() {
   (( result == 0 )) || die "Native Squad failed (exit=${result}); no push or PR."
 }
 
-require_genuine_changes() {
-  local base="$1" changes diff secret
-  git diff --no-ext-diff --no-textconv --quiet "${base}" HEAD \
-    && die "Native Squad produced no changed files; no fallback PR."
-  changes=$(git diff --no-ext-diff --no-textconv --name-only "${base}" HEAD)
-  diff=$(git diff --no-ext-diff --no-textconv --no-color "${base}" HEAD)
-  for secret in "${GITHUB_TOKEN:-}" "${GH_TOKEN:-}" "${COPILOT_TOKEN:-}"; do
-    if [[ -n "${secret}" && "${diff}" == *"${secret}"* ]]; then
-      die "Credential content detected in agent diff; no push or PR."
-    fi
-  done
-  if printf '%s' "${diff}" | grep -Eq -- '-----BEGIN .*PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}'; then
-    die "Credential pattern detected in agent diff; no push or PR."
+trusted_git() {
+  env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" GH_CONFIG_DIR="${TRUSTED_HOME}/gh" \
+    GH_TOKEN="${GITHUB_TOKEN}" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+    GIT_NO_REPLACE_OBJECTS=1 GIT_TERMINAL_PROMPT=0 LC_ALL=C \
+    git -c core.hooksPath=/dev/null -c core.autocrlf=false \
+      -c commit.gpgsign=false -c tag.gpgsign=false -c credential.helper= \
+      -c 'credential.helper=!gh auth git-credential' "$@"
+}
+
+require_issue_approval() {
+  ISSUE_STATUS=$(gh issue view "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --json state,labels) \
+    || die "Current issue approval read failed."
+  printf '%s' "${ISSUE_STATUS}" | jq -e --arg label "squad:${AGENT_TYPE}" \
+    '.state == "OPEN" and any(.labels[]; .name == $label)' >/dev/null \
+    || die "Issue closed or approved agent label withdrawn; no execution/publication."
+  LABELS=$(printf '%s' "${ISSUE_STATUS}" | jq -r '.labels[].name')
+}
+
+require_revision_binding() {
+  local binding
+  binding=$(gh pr view "${PR_NUMBER}" --repo "${GITHUB_REPO}" \
+    --json state,headRefName,headRefOid,baseRefName,isCrossRepository,author) \
+    || die "Revision PR binding read failed."
+  printf '%s' "${binding}" | jq -e --arg branch "${BRANCH}" --arg head "${HEAD_SHA}" \
+    --arg bot "${BOT_LOGIN}" --arg base "${BASE_BRANCH:-}" \
+    '.state == "OPEN" and .isCrossRepository == false and .headRefName == $branch
+     and .headRefOid == $head and .author.login == $bot
+     and ($base == "" or .baseRefName == $base)' >/dev/null \
+    || die "Revision head moved or PR is not the known trusted task context."
+}
+
+publication_python() {
+  env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" \
+    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_TERMINAL_PROMPT=0 LC_ALL=C GITHUB_TOKEN="${GITHUB_TOKEN}" COPILOT_TOKEN="${COPILOT_TOKEN}" \
+    python3 "${PUBLICATION_HELPER}" "$@"
+}
+
+prepare_readme_publication() {
+  # Never inspect or push the model's Git directory. Fetch only the qualified
+  # target ancestry into a fresh repository, then import validated file bytes.
+  PUBLISHER="${WORKSPACE}/publisher-${RANDOM}-${RANDOM}"
+  (umask 077; mkdir "${PUBLISHER}") || die "Controlled publisher directory unavailable."
+  trusted_git -C "${PUBLISHER}" init --quiet --template= \
+    || die "Controlled publisher initialization failed."
+  trusted_git -C "${PUBLISHER}" fetch --quiet --no-tags "${PUBLISH_REMOTE}" \
+    "refs/heads/${BASE_BRANCH}:refs/remotes/trusted/main" \
+    || die "Qualified main fetch failed."
+  [[ "$(trusted_git -C "${PUBLISHER}" rev-parse refs/remotes/trusted/main)" == "${EXPECTED_BASE}" ]] \
+    || die "Qualified main moved; require a fresh execution."
+  if [[ "${MSG_TYPE}" == "revise" ]]; then
+    trusted_git -C "${PUBLISHER}" fetch --quiet --no-tags "${PUBLISH_REMOTE}" \
+      "refs/heads/${BRANCH}:refs/remotes/trusted/previous" \
+      || die "Previous wrapper publication fetch failed."
+    [[ "$(trusted_git -C "${PUBLISHER}" rev-parse refs/remotes/trusted/previous)" == "${BEFORE}" ]] \
+      || die "Revision head moved; no publication."
   fi
-  if [[ "${SQUAD_README_ONLY:-false}" == "true" ]]; then
-    [[ "${changes}" == "README.md" ]] \
-      || die "README-only scope violated; no push or PR."
-    [[ -f README.md && ! -L README.md ]] || die "README must remain a regular file."
-    [[ "$(git diff --no-ext-diff --no-textconv --numstat "${base}" HEAD -- README.md)" != $'-\t-'* ]] \
-      || die "README must remain text, not a binary artifact."
-    git diff --no-ext-diff --no-textconv --quiet "${base}" HEAD -- README.md \
-      && die "README unchanged; no push or PR."
-  else
-    printf '%s\n' "${changes}" | grep -qvE '^(\.squad/|\.squad-work/)' \
-      || die "Only agent state/artifacts changed; no genuine work PR."
-  fi
-  return 0
+  PUBLISHED_HEAD=$(publication_python build "${PUBLISHER}" "${WORKSPACE}/repo" \
+      "${EXPECTED_BASE}" "${BEFORE}" "${BOT_LOGIN}" \
+      "${BOT_USER_ID}+${BOT_LOGIN}@users.noreply.github.com") \
+    || die "Trusted README publication validation failed; no push or PR."
+  [[ "${PUBLISHED_HEAD}" =~ ^[0-9a-f]{40}$ ]] || die "Invalid trusted publication receipt."
 }

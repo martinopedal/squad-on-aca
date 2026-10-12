@@ -42,6 +42,12 @@ sole approved owned squad:ripley issue
 - The worker handles the accepted-message/label race for only that configured
   poller issue, records `squad:attempted`, and cannot silently rerun duplicate
   sequential messages after native failure. No fallback PR.
+- Worker scope binding is unconditional for every message source and revision.
+  Current open-state/exact agent approval is rechecked before clone/model/push;
+  processing is not approval. Only validated README bytes enter a fresh,
+  fixed-target publisher with a qualified main or wrapper-only PR parent,
+  constant trusted bot metadata and an explicit branch-head lease.
+  No model commits, tags, configuration, hooks or alternative ancestry publish.
 - The genuine target setup PR8 was normally merged after independent review;
   its real Squad profile/team/Ripley/checker are preserved.
 - Existing target enqueue workflow must be normally retired after source
@@ -124,6 +130,9 @@ sole approved owned squad:ripley issue
   contracts are tested, alongside expiry, permission failures, existing work,
   uncertain queue acceptance, invalid scope and duplicate-attempt rejection.
 - All previous genuine-work/native failure/README/secret/revision contracts stay.
+- Revision02 adds real Git destination-object/history tests and production
+  worker approval-withdrawal/scope/known-PR tests. New exact head still requires
+  the independent rejecting reviewer's acceptance; CI is not source acceptance.
 - Bicep compilation and compiled payload assertions verify Schedule60/Event600,
   zero retries, identity scaler, min0/max1 and preserved workload-profile input.
 - Source CI container job builds actual image/tooling and both entrypoints
