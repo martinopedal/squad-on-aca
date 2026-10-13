@@ -133,6 +133,12 @@ sole approved owned squad:ripley issue
 - Revision02 adds real Git destination-object/history tests and production
   worker approval-withdrawal/scope/known-PR tests. New exact head still requires
   the independent rejecting reviewer's acceptance; CI is not source acceptance.
+- Revision03 separates model UID/GID10001 from the root controller/publisher.
+  Only fresh candidate/home paths become model-owned. Protected code, install
+  parents and publisher credentials remain root-controlled; isolated Python
+  uses a trusted working directory. Image CI must prove actual Linux permission
+  denials and genuine native README/Git success without live credentials.
+  Windows functional adapters do not constitute UID-isolation proof.
 - Bicep compilation and compiled payload assertions verify Schedule60/Event600,
   zero retries, identity scaler, min0/max1 and preserved workload-profile input.
 - Source CI container job builds actual image/tooling and both entrypoints

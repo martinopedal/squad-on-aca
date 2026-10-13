@@ -57,6 +57,19 @@ The tracked genuine Squad profile and team must exist, and the target's native
 setup checker must pass. No profile or team is synthesized. The configured App
 slug/ID and actual bot user metadata bind commit identity to the owned App.
 
+The Linux controller/publisher remains root, but the native checker, Copilot and
+all native child tools run as fixed UID/GID10001 (`squad-model`), with no
+supplementary groups, capabilities or new privileges. Setuid/setgid executables
+are removed from the image. Only the fresh candidate checkout and model home
+are chowned; their parent, wrapper, libraries, launcher, Python helper and
+installed tools remain root-owned and nonwritable to the model. Publisher
+repositories, controller home and credentials are root-only. The launcher
+receives the provider token over stdin (never argv), constructs an allowlisted
+environment, and gives only the Copilot provider credential to the CLI, not to
+the native setup checker. App tokens, MI headers and controller settings are
+never inherited by model processes. Privileged Python runs in isolated mode
+from a root-private working directory, without model PATH/import resolution.
+
 Every worker message, including historical `workflow` and revision messages,
 must match the configured repository, issue number and agent. The caller's
 `source` field is not authority. Current GitHub state must be OPEN and contain
@@ -82,8 +95,11 @@ README-only, constant-message App-bot history before native execution.
 Untrusted legacy PR history requires independent operator review, not a reset
 or automatic overwrite. These are publication boundaries, not an OS sandbox.
 
-Copilot's licensed credential and MI header secrets are stripped from shell/MCP
-child environments. Raw model/tool output, CLI logging and remote export are
+Copilot's licensed credential is stripped from shell/MCP child environments by
+`--secret-env-vars`; MI headers are absent from the CLI environment altogether.
+The provider credential necessarily exists in the CLI's own address space:
+child-environment stripping is not protection from same-UID process inspection.
+Raw model/tool output, CLI logging and remote export are
 disabled. Direct Azure/GitHub/curl/wget/push tools are denied; the wrapper owns
 publication. Git hooks and external diff drivers are disabled.
 Missing agent/setup, nonzero native exits, empty/state-only changes, binary or
@@ -124,6 +140,13 @@ runtime using explicit public upstream Go/Debian base-image references, no Azure
 credentials or private inputs, and no push. It tests installed CLI/tooling,
 both installed entrypoints, expired-window poller startup and fail-closed worker
 startup. The worker and poller use the same image with different entrypoints.
+The image suite also runs a synthetic native CLI at the real model UID: genuine
+README edits and model Git commits succeed, while helper overwrite/parent
+rename, publisher writes, controller credential/process-environment reads,
+UID escalation and controller signals fail. Hashes prove protected code remains
+unchanged, and root publication still creates qualified, constant-message
+App-shaped history without model commits. Portable Windows fixtures adapt only
+host privilege operations; they are not evidence of Linux isolation.
 No Windows Docker service, daemon, license or OS feature is changed.
 
 Private publishing remains a separate gate. The owned ACR is private; public

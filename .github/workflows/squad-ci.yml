@@ -26,6 +26,11 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Read exact rejected source for credential-free red proof
+        run: |
+          git fetch --depth=1 origin 030cbf6a6cc65194a2d4dea8b965ffd6c2f6dd53
+          git show 030cbf6a6cc65194a2d4dea8b965ffd6c2f6dd53:agents/base/runtime-contract.sh \
+            > tests/.revision03-baseline-contract.sh
       - name: Build the shared base, worker and poller runtime without credentials
         run: |
           docker build --tag squad-worker:ci --tag squad-poller:ci \
@@ -41,7 +46,7 @@ jobs:
             az version >/dev/null
             gh --version >/dev/null
             python3 -c "from pathlib import Path; compile(Path(\"/readme-publication.py\").read_bytes(), \"/readme-publication.py\", \"exec\")"
-            for script in /entrypoint.sh /poller-entrypoint.sh /github-app.sh /runtime-contract.sh; do bash -n "$script"; done
+            for script in /entrypoint.sh /poller-entrypoint.sh /github-app.sh /runtime-contract.sh /model-profile.sh; do bash -n "$script"; done
           '
           docker run --rm --entrypoint /poller-entrypoint.sh \
             --env SQUAD_TARGET_REPO=synthetic/fixture \
@@ -56,3 +61,7 @@ jobs:
           status=$?
           set -e
           test "$status" -eq 1
+      - name: Prove real Linux root/model boundary and trusted publication
+        run: |
+          docker run --rm --volume "$PWD:/ci:ro" --entrypoint /usr/bin/python3 \
+            squad-worker:ci -I /ci/tests/container-uid-smoke.py

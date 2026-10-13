@@ -135,12 +135,25 @@ def candidate_files(folder: Path) -> dict[str, Path]:
     return found
 
 
-def read_regular(path: Path, limit: int) -> bytes:
+def read_regular(path: Path, limit: int, candidate: Path) -> bytes:
     if not stat.S_ISREG(path.lstat().st_mode):
         raise ValueError("README must remain a regular file.")
-    fd = os.open(
-        path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
-    )
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    if os.name == "posix":
+        # A surviving model process may race directory components. Resolve every
+        # component by descriptor without following links into root-only paths.
+        directory = os.open(candidate, flags | os.O_DIRECTORY)
+        try:
+            parts = path.relative_to(candidate).parts
+            for part in parts[:-1]:
+                child = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
+                os.close(directory)
+                directory = child
+            fd = os.open(parts[-1], flags, dir_fd=directory)
+        finally:
+            os.close(directory)
+    else:
+        fd = os.open(path, flags | getattr(os, "O_BINARY", 0))
     with os.fdopen(fd, "rb") as handle:
         if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
             raise ValueError("README must remain a regular file.")
@@ -160,7 +173,7 @@ def import_readme(repo: str, candidate: Path, parent: str) -> str:
         if mode == b"120000":
             data = os.fsencode(os.readlink(file)) if file.is_symlink() else b""
         else:
-            data = read_regular(file, len(contents[path]))
+            data = read_regular(file, len(contents[path]), candidate)
             if os.name != "nt" and bool(file.stat().st_mode & 0o111) != (
                 mode == b"100755"
             ):
@@ -169,7 +182,7 @@ def import_readme(repo: str, candidate: Path, parent: str) -> str:
             raise ValueError("README-only scope violated.")
     if entries.get("README.md", (None,))[0] != b"100644":
         raise ValueError("Qualified README must be a regular file.")
-    data = read_regular(files["README.md"], MAX_README)
+    data = read_regular(files["README.md"], MAX_README, candidate)
     validate_readme(data)
     if data == contents["README.md"]:
         raise ValueError("Native Squad produced no changed files; no fallback PR.")

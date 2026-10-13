@@ -8,24 +8,17 @@ require_native_squad() {
   # A genuine profile can be case-sensitive even on a case-insensitive host.
   git ls-files --error-unmatch .github/agents/squad.agent.md .squad/team.md >/dev/null 2>&1 \
     || die "Native Squad profile/team must be tracked."
-  if [[ -f scripts/check-hosted-squad-setup.mjs ]]; then
-    node scripts/check-hosted-squad-setup.mjs >/dev/null 2>&1 \
-      || die "Target native Squad setup validation failed."
-  fi
 }
 
 run_squad() {
   local prompt="$1" result=0
   require_native_squad
-  # Never stream or publish raw model/tool output: it can contain credentials or
-  # hostile issue data. The parent process keeps the App token out of Copilot.
-  env -u GH_TOKEN -u GITHUB_TOKEN COPILOT_GITHUB_TOKEN="${COPILOT_TOKEN}" \
-    timeout --signal=TERM --kill-after=10s "${SQUAD_TIMEOUT_SECONDS:-480}s" \
-    copilot --yolo --agent Squad --no-auto-update --no-remote-export \
-      --log-level none --secret-env-vars=COPILOT_GITHUB_TOKEN,IDENTITY_HEADER,MSI_SECRET \
-      --deny-tool='shell(az:*)' --deny-tool='shell(gh:*)' \
-      --deny-tool='shell(curl:*)' --deny-tool='shell(wget:*)' \
-      --deny-tool='shell(git push:*)' -p "${prompt}" >/dev/null 2>&1 || result=$?
+  # No credential in argv or inherited controller environment. The protected
+  # launcher constructs the CLI-only environment and drops UID/groups/caps.
+  printf '%s\n%s' "${COPILOT_TOKEN}" "${prompt}" \
+    | env -i PATH="${PATH}" python3 -I "${MODEL_HELPER}" run \
+      "${WORKSPACE}/repo" "${MODEL_HOME}" "${SQUAD_TIMEOUT_SECONDS:-480}" \
+      >/dev/null 2>&1 || result=$?
   log "Native Squad result: exit=${result}"
   (( result == 0 )) || die "Native Squad failed (exit=${result}); no push or PR."
 }
@@ -62,10 +55,10 @@ require_revision_binding() {
 }
 
 publication_python() {
-  env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" \
+  (cd "${TRUSTED_HOME}" && env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" \
     GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
     GIT_TERMINAL_PROMPT=0 LC_ALL=C GITHUB_TOKEN="${GITHUB_TOKEN}" COPILOT_TOKEN="${COPILOT_TOKEN}" \
-    python3 "${PUBLICATION_HELPER}" "$@"
+    python3 -I "${PUBLICATION_HELPER}" "$@")
 }
 
 prepare_readme_publication() {

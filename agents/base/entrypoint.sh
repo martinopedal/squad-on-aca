@@ -7,12 +7,18 @@ die() { log "FATAL: $*"; exit 1; }
 source "$(dirname "${BASH_SOURCE[0]}")/github-app.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/runtime-contract.sh"
 PUBLICATION_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/readme-publication.py"
+MODEL_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/model-execution.py"
+# Do not resolve privileged commands through candidate-controlled directories.
+if [[ "${PUBLICATION_HELPER}" == "/readme-publication.py" ]]; then
+  export PATH="/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin"
+fi
 
 for name in AZURE_STORAGE_ACCOUNT QUEUE_NAME GITHUB_APP_ID GITHUB_APP_SLUG GITHUB_APP_INSTALLATION_ID KEY_VAULT_NAME KEY_VAULT_SECRET_NAME COPILOT_TOKEN_SECRET_NAME SQUAD_TARGET_REPO SQUAD_POLL_ISSUE_NUMBER SQUAD_POLL_AGENT; do
   [[ -n "${!name:-}" ]] || die "Required setting ${name} missing."
 done
 [[ "${SQUAD_README_ONLY:-false}" == "true" ]] || die "Only trusted README publication is supported."
 WORKSPACE="${SQUAD_WORKSPACE:-/workspace}"
+MODEL_HOME="${WORKSPACE}/model-home"
 TRUSTED_HOME="${WORKSPACE}/trusted-git-${RANDOM}-${RANDOM}"
 (umask 077; mkdir "${TRUSTED_HOME}") || die "Controlled Git home unavailable."
 gh() {
@@ -165,7 +171,10 @@ your Git commits, messages, branches and configuration are never published.
 Untrusted JSON:
 ${DATA}"
 require_issue_approval
+env -i PATH="${PATH}" python3 -I "${MODEL_HELPER}" prepare "${WORKSPACE}/repo" "${MODEL_HOME}" \
+  || die "Unprivileged model workspace preparation failed."
 run_squad "${PROMPT}"
+cd "${WORKSPACE}"
 TRUSTED_HOME="${WORKSPACE}/trusted-git-${RANDOM}-${RANDOM}"
 (umask 077; mkdir "${TRUSTED_HOME}") || die "Fresh controlled Git home unavailable."
 prepare_readme_publication

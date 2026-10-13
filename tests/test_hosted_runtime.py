@@ -67,7 +67,12 @@ class HostedRuntimeTests(unittest.TestCase):
         for key in ("GH_TOKEN", "GITHUB_TOKEN", "COPILOT_GITHUB_TOKEN", "RUNNER_TOKEN"):
             self.env.pop(key, None)
         self.message = dict(issue_number=7, agent_type="ripley", repo="owned/demo")
-        self.script("python3", f'exec "{shell_path(Path(os.sys.executable))}" "$@"\n')
+        self.script("python3", f"""
+if [[ "${{2:-}}" == *model-execution.py ]]; then
+  exec "{shell_path(Path(os.sys.executable))}" "{shell_path(ROOT / "tests" / "model-fixture.py")}" "$@"
+fi
+exec "{shell_path(Path(os.sys.executable))}" "$@"
+""")
         self.script("git", """
 args=()
 for arg in "$@"; do
@@ -642,6 +647,7 @@ echo runner-started >> "$FIXTURE_LOG"
         self.assertTrue((base / "readme-publication.py").is_file())
         self.assertIn("COPY github-app.sh runtime-contract.sh readme-publication.py /",
                       (base / "Dockerfile").read_text())
+        self.assertTrue({"model-execution.py", "model-profile.sh"} <= includes)
 
     @unittest.skipUnless(shutil.which("bicep"), "Bicep compiler unavailable; local compilation required before deployment")
     def test_compiled_job_payload_has_bounded_existing_runtime_contract(self):

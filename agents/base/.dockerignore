@@ -5,4 +5,6 @@
 !github-app.sh
 !runtime-contract.sh
 !readme-publication.py
+!model-execution.py
+!model-profile.sh
 !poller-entrypoint.sh

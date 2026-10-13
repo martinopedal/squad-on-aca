@@ -53,6 +53,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     ca-certificates \
     python3 \
+    util-linux \
+    passwd \
     pip \
     && pip install --break-system-packages --no-cache-dir azure-cli \
     && rm -rf /var/lib/apt/lists/* /root/.cache
@@ -74,11 +76,26 @@ COPY --from=build /usr/lib/node_modules/@github/copilot /usr/lib/node_modules/@g
 RUN ln -sf /usr/lib/node_modules/@github/copilot/npm-loader.js /usr/local/bin/copilot \
     && chmod +x /usr/local/bin/copilot
 
+RUN groupadd --gid 10001 squad-model \
+    && useradd --uid 10001 --gid 10001 --no-create-home \
+      --home-dir /workspace/model-home --shell /usr/sbin/nologin squad-model \
+    && find / -xdev -type f -perm /6000 -exec chmod a-s {} + \
+    && install -d -o root -g root -m 0755 /workspace \
+    && chmod 0700 /root \
+    && chown -R root:root /usr/local /usr/lib/node_modules \
+    && chmod -R go-w /usr/local /usr/lib/node_modules
+
+USER root
 WORKDIR /workspace
 
 COPY entrypoint.sh /entrypoint.sh
 COPY github-app.sh runtime-contract.sh readme-publication.py /
+COPY model-execution.py model-profile.sh /
 COPY poller-entrypoint.sh /poller-entrypoint.sh
-RUN chmod +x /entrypoint.sh /poller-entrypoint.sh
+RUN chown root:root /entrypoint.sh /poller-entrypoint.sh /github-app.sh \
+      /runtime-contract.sh /readme-publication.py /model-execution.py /model-profile.sh \
+    && chmod 0555 /entrypoint.sh /poller-entrypoint.sh /model-profile.sh \
+    && chmod 0444 /github-app.sh /runtime-contract.sh /readme-publication.py /model-execution.py \
+    && chmod go-w /
 
 ENTRYPOINT ["/entrypoint.sh"]
