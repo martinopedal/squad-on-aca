@@ -70,6 +70,14 @@ the native setup checker. App tokens, MI headers and controller settings are
 never inherited by model processes. Privileged Python runs in isolated mode
 from a root-private working directory, without model PATH/import resolution.
 
+Controller Git, GitHub and publication calls clear the inherited environment
+in a subshell, then use Bash builtins to export only their required settings.
+Credential assignments never become arguments to an external `env` process.
+The NUL-delimited environment reader has no credential arguments; invalid
+names, readonly exports or a failed reader block the child command instead of
+silently retaining unrelated controller settings. The parent environment is
+unchanged.
+
 Every worker message, including historical `workflow` and revision messages,
 must match the configured repository, issue number and agent. The caller's
 `source` field is not authority. Current GitHub state must be OPEN and contain

@@ -22,14 +22,32 @@ run_squad() {
   (( result == 0 )) || die "Native Squad failed (exit=${result}); no push or PR."
 }
 
-trusted_git() {
-  env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" GH_CONFIG_DIR="${TRUSTED_HOME}/gh" \
-    GH_TOKEN="${GITHUB_TOKEN}" GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-    GIT_NO_REPLACE_OBJECTS=1 GIT_TERMINAL_PROMPT=0 LC_ALL=C \
-    git -c core.hooksPath=/dev/null -c core.autocrlf=false \
+clean_controller_environment() {
+  local entries entry name environment_pid
+  # Bash's exported-variable list omits inherited names it cannot import.
+  mapfile -d '' -t entries < <(command env -0) || return 1
+  environment_pid=$!
+  wait "${environment_pid}" || return 1
+  for entry in "${entries[@]}"; do
+    name="${entry%%=*}"
+    [[ "${name}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || return 1
+    unset "${name}" || return 1
+  done
+}
+
+trusted_git() (
+  local controller_path="${PATH}" controller_home="${TRUSTED_HOME}"
+  local controller_token="${GITHUB_TOKEN}"
+  clean_controller_environment || die "Controlled Git environment unavailable."
+  # These are shell builtins, not KEY=secret arguments to an external env process.
+  export PATH="${controller_path}" HOME="${controller_home}"
+  export GH_CONFIG_DIR="${controller_home}/gh" GH_TOKEN="${controller_token}"
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_NO_REPLACE_OBJECTS=1 GIT_TERMINAL_PROMPT=0 LC_ALL=C
+  command git -c core.hooksPath=/dev/null -c core.autocrlf=false \
       -c commit.gpgsign=false -c tag.gpgsign=false -c credential.helper= \
       -c 'credential.helper=!gh auth git-credential' "$@"
-}
+)
 
 require_issue_approval() {
   ISSUE_STATUS=$(gh issue view "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --json state,labels) \
@@ -53,12 +71,18 @@ require_revision_binding() {
     || die "Revision head moved or PR is not the known trusted task context."
 }
 
-publication_python() {
-  (cd "${TRUSTED_HOME}" && env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" \
-    GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1 \
-    GIT_TERMINAL_PROMPT=0 LC_ALL=C GITHUB_TOKEN="${GITHUB_TOKEN}" COPILOT_TOKEN="${COPILOT_TOKEN}" \
-    python3 -I "${PUBLICATION_HELPER}" "$@")
-}
+publication_python() (
+  local controller_path="${PATH}" controller_home="${TRUSTED_HOME}"
+  local controller_app_token="${GITHUB_TOKEN}" controller_copilot_token="${COPILOT_TOKEN}"
+  local controller_helper="${PUBLICATION_HELPER}"
+  clean_controller_environment || die "Controlled publication environment unavailable."
+  export PATH="${controller_path}" HOME="${controller_home}"
+  export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_NO_REPLACE_OBJECTS=1
+  export GIT_TERMINAL_PROMPT=0 LC_ALL=C
+  export GITHUB_TOKEN="${controller_app_token}" COPILOT_TOKEN="${controller_copilot_token}"
+  cd "${controller_home}" || die "Controlled publication home unavailable."
+  command python3 -I "${controller_helper}" "$@"
+)
 
 prepare_readme_publication() {
   # Never inspect or push the model's Git directory. Fetch only the qualified

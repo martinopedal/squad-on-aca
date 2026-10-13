@@ -31,7 +31,11 @@ class HostedRuntimeTests(unittest.TestCase):
         self.origin = self.folder / "origin"
         self.workspace = self.folder / "work"
         self.workspace.mkdir()
-        self.env = dict(os.environ)
+        # Windows platform-only names are not Linux controller inputs.
+        self.env = {
+            name: value for name, value in os.environ.items()
+            if os.name != "nt" or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name)
+        }
         self.env.update(
             AZURE_STORAGE_ACCOUNT="syntheticstorage",
             QUEUE_NAME="fixture-queue",

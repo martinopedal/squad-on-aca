@@ -21,10 +21,14 @@ WORKSPACE="${SQUAD_WORKSPACE:-/workspace}"
 MODEL_HOME="${WORKSPACE}/model-home"
 TRUSTED_HOME="${WORKSPACE}/trusted-git-${RANDOM}-${RANDOM}"
 (umask 077; mkdir "${TRUSTED_HOME}") || die "Controlled Git home unavailable."
-gh() {
-  env -i PATH="${PATH}" HOME="${TRUSTED_HOME}" GH_CONFIG_DIR="${TRUSTED_HOME}/gh" \
-    GH_TOKEN="${GITHUB_TOKEN}" gh "$@"
-}
+gh() (
+  local controller_path="${PATH}" controller_home="${TRUSTED_HOME}"
+  local controller_token="${GITHUB_TOKEN}"
+  clean_controller_environment || die "Controlled GitHub environment unavailable."
+  export PATH="${controller_path}" HOME="${controller_home}"
+  export GH_CONFIG_DIR="${controller_home}/gh" GH_TOKEN="${controller_token}"
+  command gh "$@"
+)
 
 if [[ -n "${AZURE_CLIENT_ID:-}" ]]; then
   az login --identity --client-id "${AZURE_CLIENT_ID}" --allow-no-subscriptions -o none >/dev/null 2>&1 \
