@@ -1,0 +1,28 @@
+name: Owned private publisher source
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - infra/bicep/owned-publisher.bicep
+      - tests/test_owned_publisher.py
+      - .github/workflows/owned-publisher-source.yml
+      - docs/owned-private-publisher.md
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Compile actual Bicep and test pool-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep version || az bicep install --version v0.47.16
+          BICEP_PATH="$HOME/.azure/bin"
+          export PATH="$BICEP_PATH:$PATH"
+          python3 -m unittest discover -s tests -p test_owned_publisher.py -v
