@@ -2,6 +2,11 @@
 
 > How to customize the container image, entrypoint, and add new agent types.
 
+For this owned fork's fail-closed behavior, ephemeral private enqueue runner,
+immutable images and existing-resource deployment gates, see
+[Owned runtime repair](owned-runtime.md). Failed AI work no longer opens a
+fallback artifact PR; successful work must contain a genuine changed-file diff.
+
 ---
 
 ## Customizing the Container Image
@@ -39,7 +44,7 @@ Adding agents to your Squad team requires no infrastructure changes — only Squ
 1. **Initialize your Squad team**: In your target repo, start a Copilot CLI session with the Squad agent manifest (`.github/agents/squad.agent.md`). Squad proposes a team with unique agent names from a fictional universe (e.g., `ripley`, `data`, `gandalf`). Confirm the proposal and Squad creates the `.squad/` directory with `team.md`, `routing.md`, and agent charters.
 2. **Labels are created automatically**: `squad init` creates `squad:{agent-name}` labels on the repo for each team member, along with Squad's full label taxonomy. Squad also installs `sync-squad-labels.yml` to keep labels in sync with the roster.
 3. **Commit the `.squad/` directory**: Push the initialized team config to git. When the container clones the repo, it reads `.squad/team.md` to discover agents.
-4. **Label an issue**: Use `squad:{agent-name}` to trigger the pipeline. The queue message carries `"agent_type": "{agent-name}"`, the container runs `copilot --yolo --agent squad`, and Squad routes to the correct agent charter.
+4. **Label an issue**: Use `squad:{agent-name}` to trigger the pipeline. The queue message carries `"agent_type": "{agent-name}"`, the container runs `copilot --yolo --agent Squad -p ...` from the target clone, and Squad routes to the correct agent charter.
 5. **No infrastructure changes**: The single generic Container App Job handles all agent types.
 
 ---

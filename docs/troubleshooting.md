@@ -49,7 +49,9 @@ az containerapp job execution show --name "job-squad-agent-XXXX" \
 
 ## Copilot CLI Fails
 
-The container handles this gracefully by creating a work artifact. Check the PR body for `.squad-work/issue-N.md`, which includes the last 50 lines of Copilot output.
+The owned fork exits nonzero without a fallback artifact or PR. Check the exact
+ACA execution's sanitized numeric native result. Raw CLI output is deliberately
+not persisted or published. See [Owned runtime repair](owned-runtime.md).
 
 **Typical causes**:
 - Copilot-licensed PAT expired or revoked

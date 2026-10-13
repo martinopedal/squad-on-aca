@@ -12,7 +12,7 @@
 
 GitHub Apps cannot hold Copilot licenses. You **must** have a Copilot-licensed user generate a Personal Access Token (PAT) and upload it to Key Vault. This creates several operational concerns:
 
-- **PAT expiration**: When the PAT expires, all agent runs fail silently (Copilot CLI returns a non-zero exit code, and the fallback work artifact is created instead of real code changes).
+- **PAT expiration**: When the PAT expires, the owned runtime exits nonzero and does not push or create a PR. Raw CLI output is not published.
 - **License dependency**: If the PAT owner loses their Copilot license (seat removed, org change, subscription lapse), all agent runs fail.
 - **Token scope**: The PAT needs at minimum the `copilot` scope. Broader scopes increase blast radius.
 - **Rotation burden**: Someone must remember to rotate the PAT before it expires.
@@ -169,18 +169,18 @@ All target repositories share one Azure Storage Queue (`squad-work-queue`). Ther
 
 ### No Retry on Copilot Failure
 
-If Copilot CLI fails (exit code ≠ 0), the container creates a **work artifact** (`.squad-work/issue-N.md`) and creates the PR with a diagnostic note. It does **not**:
+If Copilot CLI fails (exit code ≠ 0), the owned container reports a numeric failure and exits without a work artifact or PR. It does **not**:
 
 - Re-enqueue the message for retry
 - Start a new container for the same issue
-- Notify the user via any channel other than the PR body
+- Create a success-shaped diagnostic PR
 
-**Why**: Automatic retry would likely fail again with the same error (bad prompt, auth issue, rate limit). The work artifact preserves context so a human can investigate.
+**Why**: Automatic retry would likely fail again with the same error (bad prompt, auth issue, rate limit). A failed job must not be mistaken for successful agent work.
 
 **Mitigation**:
-- Check the PR body's "Pipeline Status" table — Copilot shows `⚠️ fallback` if it failed.
-- Check `.squad-work/issue-N.md` in the PR for Copilot's last 50 lines of output.
-- Fix the root cause (expired PAT, malformed issue body), remove the `squad:queued` label, and re-label with `squad:{agent-name}` to retry.
+- Check the exact job execution status and sanitized numeric native result.
+- See [Owned runtime repair](owned-runtime.md) for source/authentication/deployment gates.
+- After fixing the root cause, explicitly approve an operator retry with dedup checks; do not create duplicate smoke issues.
 
 ---
 

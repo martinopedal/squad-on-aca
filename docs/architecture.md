@@ -17,7 +17,33 @@ See [Terraform vs Bicep and azd: which should you choose?](adoption-guide.md#ter
 
 ## End-to-End Flow
 
-The following sequence diagram traces a complete lifecycle from issue labeling through PR creation and the `/squad revise` feedback loop.
+The owned private fork uses this scheduled-poller flow. It reuses existing
+Issues/Contents/Pull requests App permissions, not runner Administration.
+
+```mermaid
+sequenceDiagram
+    participant Issue as Sole approved owned issue
+    participant Poller as Private scheduled ACA Job
+    participant KV as Existing Key Vault
+    participant Queue as Existing Storage Queue
+    participant Worker as KEDA event ACA Job
+    participant Squad as Real target Squad
+    participant PR as Genuine README bot PR
+    Poller->>KV: Existing MI reads App PEM inside job
+    Poller->>Issue: Narrow target App token; read bound issue/labels
+    Poller->>Issue: Dedup processing/attempted, branch and PR
+    Poller->>Queue: MI peek; accepted metadata put, TTL600/delay10
+    Poller->>Issue: Only then add processing
+    Queue->>Worker: KEDA min0/max1 starts event execution
+    Worker->>Issue: Bound race recovery; mark native attempt once
+    Worker->>Squad: Real profile/checker; protected noninteractive CLI
+    Squad-->>Worker: Numeric native return and actual changed files
+    Worker->>PR: Success + README/secret guards; actual configured App
+```
+
+See [owned runtime gates and cost](owned-runtime.md). The following diagram
+preserves the optional original GitHub Actions transport and revision recipe;
+it is not the owned private demo's enqueue dependency:
 
 ```mermaid
 sequenceDiagram
@@ -62,11 +88,11 @@ sequenceDiagram
     Job->>KV: Retrieve Copilot PAT
     Job->>GH: Clone repo, create branch<br/>squad/{agent-name}/issue-42
     Job->>GH: Fetch issue title + body
-    Job->>Copilot: echo prompt | copilot --yolo --agent squad
-    Note over Job,Copilot: Token swap: GITHUB_TOKEN = Copilot PAT
+    Job->>Copilot: copilot --agent Squad -p task data (protected environment)
+    Note over Job,Copilot: Copilot credential isolated; App token removed
     Copilot->>Copilot: Read .squad/team.md, route to @{agent-name}
     Copilot->>Job: Code changes + commits
-    Note over Job,Copilot: Token swap back: GITHUB_TOKEN = App token
+    Note over Job,Copilot: Trusted wrapper retains App authority
     Job->>GH: git push origin squad/{agent-name}/issue-42
     Job->>PR: gh pr create (enriched body)
     Job->>GH: Swap labels: processing → queued
@@ -201,14 +227,15 @@ flowchart TD
     subgraph ReviseFlow["Revision Flow"]
         direction TB
         R1["Clone repo + checkout<br/>existing branch"] --> R2{HEAD SHA<br/>matches enqueued?}
-        R2 -->|No| R2a["Comment stale warning<br/>Remove squad:revising<br/>Exit 0"]
+        R2 -->|No| R2a["Remove squad:revising<br/>Exit nonzero — stale request"]
         R2 -->|Yes| R3["Collect review feedback<br/>(reviews + inline comments + diff)"]
         R3 --> R4["Build revision prompt"]
-        R4 --> R5["Swap token → Copilot PAT"]
-        R5 --> R6["echo prompt | copilot --yolo --agent squad"]
-        R6 --> R7["Swap token → App token"]
-        R7 --> R8["Stage + commit changes"]
-        R8 --> R9["Commit .squad/ state"]
+        R4 --> R5["Native profile + protected Copilot environment"]
+        R5 --> R6["copilot --agent Squad -p task data"]
+        R6 --> R7{Native exit 0?}
+        R7 -->|No| Failed["Exit nonzero — no publication"]
+        R7 -->|Yes| R8["Stage + commit changes"]
+        R8 --> R9["Require genuine diff + scope + secret guards"]
         R9 --> R10["git push (additive, no force)"]
         R10 --> R11["Comment revision summary on PR"]
         R11 --> R12["Remove squad:revising label"]
@@ -222,18 +249,17 @@ flowchart TD
         N2 -->|Yes| N3{Existing open PR<br/>for this issue?}
         N3 -->|Yes| N3a["Swap labels → Exit 0"]
         N3 -->|No| N4{Existing branch<br/>for this issue?}
-        N4 -->|Yes| N4a["Branch exists → Exit 0"]
+        N4 -->|Yes| N4a["Branch exists → stop for manual review"]
         N4 -->|No| N5["Clone repo + create branch<br/>squad/{agent}/issue-{N}"]
         N5 --> N6["Fetch issue title + body"]
-        N6 --> N7["Swap token → Copilot PAT"]
-        N7 --> N8["echo prompt | copilot --yolo --agent squad"]
-        N8 --> N9["Swap token → App token"]
-        N9 --> N10{Copilot<br/>produced commits?}
-        N10 -->|Yes| N11["Stage uncommitted changes"]
-        N10 -->|No| N12["Create work artifact<br/>.squad-work/issue-N.md"]
-        N11 --> N13["Commit .squad/ state"]
-        N12 --> N13
-        N13 --> N14["git push + gh pr create<br/>(enriched body)"]
+        N6 --> N7["Native profile + protected Copilot environment"]
+        N7 --> N8["copilot --agent Squad -p task data"]
+        N8 --> N9{Native exit 0?}
+        N9 -->|No| Failed
+        N9 -->|Yes| N11["Stage + commit changes"]
+        N11 --> N13{Genuine diff + scope<br/>+ secret guards pass?}
+        N13 -->|No| Failed
+        N13 -->|Yes| N14["git push + gh pr create<br/>(sanitized result/commit receipt)"]
         N14 --> N15["Swap labels:<br/>processing → queued"]
     end
 
@@ -257,26 +283,20 @@ GitHub Apps cannot hold Copilot licenses. This creates a fundamental authenticat
 | **App Installation Token** | GitHub App PEM → JWT → token exchange | git push, PR create, label ops, issue edits | 1 hour | Generated at runtime |
 | **Copilot PAT** | Copilot-licensed user's Personal Access Token | `copilot --yolo` CLI invocation only | Until revoked/expired | Key Vault secret |
 
-### How the token swap works in `entrypoint.sh`:
+### How authentication is separated:
 
 ```bash
-# App token generated from GitHub App installation
-APP_TOKEN="${GITHUB_TOKEN}"
-
-# Before Copilot CLI — swap to Copilot PAT
-export GITHUB_TOKEN="${COPILOT_TOKEN}"
-echo "${SQUAD_PROMPT}" | copilot --yolo --agent squad
-
-# After Copilot CLI — swap back to App token
-export GITHUB_TOKEN="${APP_TOKEN}"
+# The wrapper's App token is not inherited by Copilot.
+# run_squad also applies logging, secret-env, tool and timeout controls.
+run_squad "${PROMPT}"
 git push origin "${BRANCH}"
-gh pr create ...
+gh pr create --repo "${GITHUB_REPO}" ...
 ```
 
 ### Why two tokens?
 
 1. **GitHub Apps are org-level identities** — they don't have user accounts, so they can't be assigned Copilot licenses.
-2. **Copilot CLI requires `GITHUB_TOKEN`** — it uses this env var to authenticate with GitHub's Copilot API. The token must belong to a user with an active Copilot license.
+2. **Copilot CLI uses `COPILOT_GITHUB_TOKEN`** — the licensed credential is isolated from App credentials, stripped from shell/MCP environments, and not published in model output.
 3. **Minimal blast radius** — the Copilot PAT only needs `copilot` scope. It's never used for git operations, PR creation, or label management.
 4. **Audit clarity** — all repository mutations (commits, PRs, labels) show as `squad-aca-bot[bot]`, not a personal user.
 

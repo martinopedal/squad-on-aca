@@ -42,8 +42,8 @@ These decisions are also captured in `.squad/decisions.md`:
 - **Single Generic Job**: One Container App Job handles all agent types. Agent type comes from queue message. Adding new agents = zero infrastructure changes. Agent names come from Squad's casting system, defined in `.squad/team.md`.
 - **UAMI for Scaling**: KEDA uses Managed Identity for auth (no connection strings). Storage account blocks shared keys per subscription policy.
 - **Container Self-Dequeue**: Each container manages its own queue interaction (dequeue, delete). Enables dedup checks and failsafe behavior.
-- **Dual Auth Pattern**: App token for git/PR ops, Copilot PAT for `copilot --yolo`. Both stored in Key Vault, swapped at runtime.
-- **Graceful Fallback**: If Copilot fails, work artifact is created so PR still gets made.
+- **Dual Auth Pattern**: App PEM and Copilot PAT stay in Key Vault; App tokens are minted at runtime. Copilot receives only its licensed credential, not the App token.
+- **Fail-Closed Publication**: Failed, empty and out-of-scope agent work exits nonzero without a stub PR. See [Owned runtime repair](owned-runtime.md).
 
 ---
 
@@ -55,7 +55,7 @@ Full decision log is in `.squad/decisions.md`. Key architectural choices:
 2. **Identity-Based Auth Everywhere** — No shared keys, all Azure API calls use Managed Identity
 3. **KEDA + Storage Queue** — Event-driven scaling; KEDA polls every 30s
 4. **Container Self-Dequeue** — Container owns queue interaction; enables dedup and failsafe
-5. **Copilot CLI --yolo** — Ephemeral container is safe to run with yolo mode; graceful fallback on failure
+5. **Copilot CLI --yolo** — The owned runtime adds native secret/tool controls and a publication guard; an ephemeral container alone is not a security boundary.
 6. **Dual Auth (App token + Copilot PAT)** — GitHub Apps can't hold licenses; use PAT for `copilot` CLI only
 
 ---
@@ -305,8 +305,8 @@ The entrypoint implements the core agent lifecycle:
 5. **Clone repo**: `gh repo clone {owner/repo}`
 6. **Create branch**: `squad/{agent_type}/issue-{issue_number}`
 7. **Fetch issue**: Get title, body, labels from GitHub API
-8. **Run Copilot**: `copilot --yolo --agent squad` (reads issue body, makes changes)
-9. **Fallback**: If Copilot fails, create work artifact in `.squad-work/`
-10. **Team state**: Commit any `.squad/` changes (decisions, history)
-11. **Push + PR**: Push branch, create PR with enriched body
+8. **Run Copilot**: `copilot --yolo --agent Squad -p ...` from the target clone, with native secret/tool controls.
+9. **Failure guard**: Nonzero native exits cannot publish; no fallback artifact.
+10. **Changed-file guard**: Commit and validate genuine work; README smoke mode rejects all other files.
+11. **Push + PR**: The App-authenticated wrapper publishes a sanitized result/commit receipt.
 12. **Label swap**: Remove `squad:processing`, add `squad:queued`

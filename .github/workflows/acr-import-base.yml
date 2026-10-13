@@ -5,23 +5,33 @@ on:
     description: Manually import base images from Docker Hub to ACR
 
 env:
-  ACR_NAME: crsquadacaa6b49feb
-  ACR_REGISTRY_URL: crsquadacaa6b49feb.azurecr.io
+  ACR_NAME: ${{ vars.SQUAD_ACR_NAME }}
+  AZURE_CLIENT_ID: ${{ vars.SQUAD_PUBLISH_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.SQUAD_AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.SQUAD_AZURE_SUBSCRIPTION_ID }}
 
 jobs:
   import-base-images:
+    if: github.repository == 'martinopedal/squad-on-aca'
     runs-on: ubuntu-latest
+    environment: owned-runtime
     permissions:
       id-token: write
       contents: read
 
     steps:
+      - name: Require qualified owned configuration
+        run: |
+          : "${ACR_NAME:?Owned ACR is not configured}"
+          : "${AZURE_CLIENT_ID:?Owned publisher identity is not configured}"
+          : "${AZURE_TENANT_ID:?Owned tenant is not configured}"
+          : "${AZURE_SUBSCRIPTION_ID:?Owned subscription is not configured}"
       - name: Log in to Azure using OIDC
         uses: azure/login@v2
         with:
-          client-id: 63223493-a39f-4a62-82ef-09c5066ae3c0
-          tenant-id: 49ff7219-653a-4644-8540-71d16dbf9c16
-          subscription-id: e69b8a95-fe38-42da-b5e6-e3e0a833cf9e
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
 
       - name: Import golang base image
         run: |
@@ -29,7 +39,7 @@ jobs:
             --name ${{ env.ACR_NAME }} \
             --source "docker.io/library/golang:1.23.4-bookworm" \
             --image "base/golang:1.23.4-bookworm" \
-            --force
+            --only-show-errors
 
       - name: Import debian base image
         run: |
@@ -37,12 +47,12 @@ jobs:
             --name ${{ env.ACR_NAME }} \
             --source "docker.io/library/debian:bookworm-20240701-slim" \
             --image "base/debian:bookworm-20240701-slim" \
-            --force
+            --only-show-errors
 
       - name: Verify imports
         run: |
           echo "Golang image:"
-          az acr repository show-tags --name ${{ env.ACR_NAME }} --repository base/golang || true
+          az acr repository show-tags --name "$ACR_NAME" --repository base/golang
           echo ""
           echo "Debian image:"
-          az acr repository show-tags --name ${{ env.ACR_NAME }} --repository base/debian || true
+          az acr repository show-tags --name "$ACR_NAME" --repository base/debian

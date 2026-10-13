@@ -1,0 +1,54 @@
+name: Build owned hosted runtime images
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: owned-runtime-images
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'martinopedal/squad-on-aca' && github.ref == 'refs/heads/main'
+    # This optional label must identify an already accepted private publisher.
+    # No such route is currently qualified; do not create a runner or new IAM.
+    runs-on: [self-hosted, squad-owned-private-publisher]
+    environment: owned-runtime
+    env:
+      ACR_NAME: ${{ vars.SQUAD_ACR_NAME }}
+      AZURE_CLIENT_ID: ${{ vars.SQUAD_PUBLISH_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.SQUAD_AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.SQUAD_AZURE_SUBSCRIPTION_ID }}
+      PRIVATE_PUBLISHER_ACCEPTED: ${{ vars.SQUAD_PRIVATE_PUBLISHER_ACCEPTED }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require qualified owned publisher settings
+        run: |
+          : "${ACR_NAME:?Owned ACR is not configured}"
+          : "${AZURE_CLIENT_ID:?Owned publisher identity is not configured}"
+          : "${AZURE_TENANT_ID:?Owned tenant is not configured}"
+          : "${AZURE_SUBSCRIPTION_ID:?Owned subscription is not configured}"
+          test "$PRIVATE_PUBLISHER_ACCEPTED" = true
+      - name: Verify offline runtime contracts
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - name: Build images without updating runtime jobs
+        run: |
+          set -euo pipefail
+          registry=$(az acr show --name "$ACR_NAME" --query loginServer -o tsv)
+          az acr build --registry "$ACR_NAME" --image "squad-agent:$GITHUB_SHA" \
+            --build-arg "BASE_ACR_HOST=$registry/" agents/base
+          digest=$(az acr repository show --name "$ACR_NAME" \
+            --image "squad-agent:$GITHUB_SHA" --query digest -o tsv)
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          agent="$registry/squad-agent@$digest"
+          printf 'Accepted source: %s\nAgent and poller image: %s\n' \
+            "$GITHUB_SHA" "$agent" >> "$GITHUB_STEP_SUMMARY"

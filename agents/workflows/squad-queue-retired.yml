@@ -1,0 +1,16 @@
+# Copy to the owned target's existing .github/workflows/squad-queue.yml only
+# through an independently accepted PR. This does not cancel historical runs.
+name: Squad queue transport status
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Issue enqueue is handled by the accepted private ACA scheduled poller."
+          echo "This workflow does not enqueue issues, register runners or authenticate to Azure."
