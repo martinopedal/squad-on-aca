@@ -12,7 +12,6 @@ require_native_squad() {
 
 run_squad() {
   local prompt="$1" result=0
-  require_native_squad
   # No credential in argv or inherited controller environment. The protected
   # launcher constructs the CLI-only environment and drops UID/groups/caps.
   printf '%s\n%s' "${COPILOT_TOKEN}" "${prompt}" \
@@ -35,8 +34,8 @@ trusted_git() {
 require_issue_approval() {
   ISSUE_STATUS=$(gh issue view "${ISSUE_NUMBER}" --repo "${GITHUB_REPO}" --json state,labels) \
     || die "Current issue approval read failed."
-  printf '%s' "${ISSUE_STATUS}" | jq -e --arg label "squad:${AGENT_TYPE}" \
-    '.state == "OPEN" and any(.labels[]; .name == $label)' >/dev/null \
+  printf '%s' "${ISSUE_STATUS}" | jq -e --arg approved_label "squad:${AGENT_TYPE}" \
+    '.state == "OPEN" and any(.labels[]; .name == $approved_label)' >/dev/null \
     || die "Issue closed or approved agent label withdrawn; no execution/publication."
   LABELS=$(printf '%s' "${ISSUE_STATUS}" | jq -r '.labels[].name')
 }

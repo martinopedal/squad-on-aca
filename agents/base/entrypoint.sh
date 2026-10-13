@@ -171,6 +171,7 @@ your Git commits, messages, branches and configuration are never published.
 Untrusted JSON:
 ${DATA}"
 require_issue_approval
+require_native_squad
 env -i PATH="${PATH}" python3 -I "${MODEL_HELPER}" prepare "${WORKSPACE}/repo" "${MODEL_HOME}" \
   || die "Unprivileged model workspace preparation failed."
 run_squad "${PROMPT}"

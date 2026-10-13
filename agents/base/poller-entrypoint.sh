@@ -29,8 +29,8 @@ ISSUE=$(github_request GET "${API}/issues/${NUMBER}" "${TOKEN}") || die "Approve
 printf '%s' "${ISSUE}" | jq -e --argjson number "${NUMBER}" \
   '.number == $number and .pull_request == null and (.labels | type == "array")' >/dev/null 2>&1 \
   || die "Approved issue binding invalid."
-if ! printf '%s' "${ISSUE}" | jq -e --arg label "squad:${AGENT}" \
-  '.state == "open" and any(.labels[]; .name == $label)' >/dev/null 2>&1; then
+if ! printf '%s' "${ISSUE}" | jq -e --arg approved_label "squad:${AGENT}" \
+  '.state == "open" and any(.labels[]; .name == $approved_label)' >/dev/null 2>&1; then
   log "Approved issue is closed or lacks its configured agent label; no work."
   exit 0
 fi

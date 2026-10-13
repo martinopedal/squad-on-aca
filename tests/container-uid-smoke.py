@@ -371,6 +371,21 @@ class LinuxBoundary(unittest.TestCase):
                                     )
                                 )
                         tool.chmod(0o555)
+                    if mode == "readme":
+                        poller = subprocess.run(
+                            ["/bin/bash", "/poller-entrypoint.sh"],
+                            env=fixture.env,
+                            capture_output=True,
+                            text=True,
+                            cwd=fixture.folder,
+                            timeout=15,
+                            check=False,
+                        )
+                        self.assertEqual(
+                            poller.returncode, 0, poller.stdout + poller.stderr
+                        )
+                        self.assertIn("queue-put", fixture.calls())
+                        fixture.assert_no_secrets(poller)
                     result = subprocess.run(
                         ["/bin/bash", "/entrypoint.sh"],
                         env=fixture.env,
@@ -388,6 +403,9 @@ class LinuxBoundary(unittest.TestCase):
                             "Native Squad produced no changed files", result.stderr
                         )
                     self.unchanged()
+                    print(
+                        f"Actual installed entrypoints + unmodified UID launcher: {mode} PASS"
+                    )
                 finally:
                     for tool in installed:
                         tool.unlink()
@@ -396,9 +414,6 @@ class LinuxBoundary(unittest.TestCase):
                             saved.replace(tool)
                     backup.rmdir()
                     fixture.tearDown()
-        print(
-            "Actual /entrypoint.sh + unmodified UID launcher: native positive/empty negative PASS"
-        )
 
 
 if __name__ == "__main__":

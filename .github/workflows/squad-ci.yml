@@ -43,6 +43,12 @@ jobs:
             set -euo pipefail
             copilot --no-auto-update --version
             copilot --help | grep -- --secret-env-vars >/dev/null
+            install -d -o 10001 -g 10001 -m 0700 /workspace/version-home
+            setpriv --reuid=10001 --regid=10001 --clear-groups --no-new-privs \
+              --inh-caps=-all --ambient-caps=-all --bounding-set=-all \
+              env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/workspace/version-home \
+                TMPDIR=/workspace/version-home \
+                /usr/local/bin/copilot --no-auto-update --version
             az version >/dev/null
             gh --version >/dev/null
             python3 -c "from pathlib import Path; compile(Path(\"/readme-publication.py\").read_bytes(), \"/readme-publication.py\", \"exec\")"
