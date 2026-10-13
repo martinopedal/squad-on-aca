@@ -632,6 +632,17 @@ echo runner-started >> "$FIXTURE_LOG"
         self.assertIn("maxExecutions: 1", template)
         self.assertIn("minExecutions: 0", template)
 
+    def test_worker_image_context_includes_trusted_publisher(self):
+        base = ROOT / "agents" / "base"
+        includes = {
+            line[1:] for line in (base / ".dockerignore").read_text().splitlines()
+            if line.startswith("!")
+        }
+        self.assertIn("readme-publication.py", includes)
+        self.assertTrue((base / "readme-publication.py").is_file())
+        self.assertIn("COPY github-app.sh runtime-contract.sh readme-publication.py /",
+                      (base / "Dockerfile").read_text())
+
     @unittest.skipUnless(shutil.which("bicep"), "Bicep compiler unavailable; local compilation required before deployment")
     def test_compiled_job_payload_has_bounded_existing_runtime_contract(self):
         result = subprocess.run(
